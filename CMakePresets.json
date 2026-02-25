@@ -1,0 +1,123 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21
+  },
+  "configurePresets": [
+    {
+      "name": "win64-msvc-release",
+      "displayName": "win64-msvc-release",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "toolset": "host=x64",
+      "environment": {
+        "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
+      },
+      "cacheVariables": {
+        "QT5_DIR": "C:/Qt/5.15.2/msvc2019_64",
+        "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64",
+        "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1"
+      }
+    },
+    {
+      "name": "win64-msvc-debug",
+      "displayName": "win64-msvc-debug",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "toolset": "host=x64",
+      "environment": {
+        "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
+      },
+      "cacheVariables": {
+        "QT5_DIR": "C:/Qt/5.15.2/msvc2019_64",
+        "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64",
+        "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1"
+      }
+    },
+    {
+      "name": "win32-msvc-release",
+      "displayName": "win32-msvc-release",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "win32",
+      "toolset": "host=x86",
+      "environment": {
+        "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
+      },
+      "cacheVariables": {
+        "QT5_DIR": "C:/Qt/5.15.2/msvc2019",
+        "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32",
+        "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win32-lgpl-shared-7.1",
+        "COMPATIBLE_WIN7": "ON"
+      }
+    },
+    {
+      "name": "win32-msvc-debug",
+      "displayName": "win32-msvc-debug",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "win32",
+      "toolset": "host=x86",
+      "environment": {
+        "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
+      },
+      "cacheVariables": {
+        "QT5_DIR": "C:/Qt/5.15.2/msvc2019",
+        "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32",
+        "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win32-lgpl-shared-7.1",
+        "COMPATIBLE_WIN7": "ON"
+      }
+    },
+    {
+      "name": "linux-x64",
+      "displayName": "linux-x64",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/linux-x64",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "linux-arm",
+      "displayName": "linux-arm (ARMv7)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/linux-arm",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "win64-msvc-release",
+      "configurePreset": "win64-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "win64-msvc-debug",
+      "configurePreset": "win64-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win32-msvc-release",
+      "configurePreset": "win32-msvc-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "win32-msvc-debug",
+      "configurePreset": "win32-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "linux-x64",
+      "configurePreset": "linux-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux-arm",
+      "configurePreset": "linux-arm",
+      "configuration": "Release"
+    }
+  ]
+}
