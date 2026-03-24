@@ -46,10 +46,12 @@ bool isRunning()
 {
 #if defined(Q_OS_WIN64) || defined(Q_OS_WIN32)
     // Windows 使用互斥锁
-    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\airan_mutex");
+    // 使用 static 保持句柄生命周期与进程一致，防止 mutex 对象被提前释放
+    static HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Global\\airan_mutex");
     if (GetLastError() == ERROR_ALREADY_EXISTS)
     {
         CloseHandle(hMutex);
+        hMutex = NULL;
         return true;
     }
     return false;

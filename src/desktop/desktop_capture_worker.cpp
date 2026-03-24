@@ -703,6 +703,7 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
     D3D11_TEXTURE2D_DESC srcDesc{};
     texture->GetDesc(&srcDesc);
     // 遍历所有订阅者，使用各自的编码器编码
+    bool encodedAnyFrame = false;
     for (auto it : m_subscribers.values())
     {
         ID3D11Texture2D *encodeTexture = texture;
@@ -730,6 +731,7 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
                     {
                         LOG_TRACE("Encoded CPU-fallback frame for subscriber {} -> {} bytes", it->id, cpuResult.first->size());
                         emit frameEncoded(it->id, cpuResult.first, cpuResult.second);
+                        encodedAnyFrame = true;
                         continue;
                     }
                     LOG_TRACE("CPU-fallback encode returned empty for subscriber {}", it->id);
@@ -738,6 +740,10 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
                 {
                     LOG_TRACE("CPU-fallback texture copy failed for subscriber {}", it->id);
                 }
+
+                // 关键修复：GPU缩放失败且CPU兜底也失败时，不能再把原尺寸纹理送入编码器。
+                // 否则会每帧触发 size mismatch（例如 1317x823 -> 1312x816）。
+                continue;
             }
             else
             {
@@ -747,7 +753,12 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
 
         if (it->encoder)
         {
-            auto result = it->encoder->zeroCopyEncodeGPU(encodeTexture);
+            std::pair<std::shared_ptr<rtc::binary>, quint64> result;
+            if (it->encoder->isHardwareEncoder())
+            {
+                result = it->encoder->zeroCopyEncodeGPU(encodeTexture);
+            }
+
             if (result.first->empty())
             {
                 result = it->encoder->encodeGPU(encodeTexture);
@@ -756,6 +767,7 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
             {
                 LOG_TRACE("Encoded GPU frame for subscriber {} -> {} bytes", it->id, result.first->size());
                 emit frameEncoded(it->id, result.first, result.second);
+                encodedAnyFrame = true;
             }
             else
             {
@@ -773,6 +785,14 @@ bool DesktopCaptureWorker::captureAndEncodeGPU()
     {
         m_desktopGrab->releaseLastFrame(texture);
     }
+
+    // 本轮GPU路径无任何有效输出时，返回false让调用方回退到CPU路径，避免出现“持续无画面”。
+    if (!m_subscribers.isEmpty() && !encodedAnyFrame)
+    {
+        LOG_WARN("GPU path produced no encoded frame in this tick, fallback to CPU path");
+        return false;
+    }
+
     return true;
 #endif
     return false;
@@ -788,15 +808,17 @@ bool DesktopCaptureWorker::captureAndEncodeCPU()
         return false;
     }
     // 遍历所有订阅者，使用各自的编码器编码
+    // 注意：编码器初始化使用的是 dstW/dstH，CPU 路径必须输出完全一致的分辨率。
+    // 若使用 KeepAspectRatio 会得到 1305x816 这类尺寸，触发 encodeCPU size mismatch。
+    const QImage sourceFrame = frame;
     for (auto it : m_subscribers.values())
     {
-        // 根据订阅者的帧率进行限流
-        qint64 interval = (it->fps > 0) ? (1000 / it->fps) : 33;
-
         if (it->encoder)
         {
-            frame = frame.scaled(it->dstW, it->dstH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            auto result = it->encoder->encodeCPU(frame);
+            QImage scaledFrame = sourceFrame.scaled(it->dstW, it->dstH,
+                                                    Qt::IgnoreAspectRatio,
+                                                    Qt::SmoothTransformation);
+            auto result = it->encoder->encodeCPU(scaledFrame);
             if (!result.first->empty())
             {
                 emit frameEncoded(it->id, result.first, result.second);

@@ -41,7 +41,7 @@ void LoggerManager::initialize(const QString &logFilePath)
             logFileBase = QCoreApplication::applicationDirPath() + "/logs";
         }
         QDir().mkpath(logFileBase);
-        logFileBase += "/signal_server";
+        logFileBase += "/airan-desk";
         // 创建多个输出器：控制台 + 按日期分割的文件
         console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         setLogLevel(console_sink);

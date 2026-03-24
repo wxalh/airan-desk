@@ -193,9 +193,21 @@ elseif(UNIX)
     # 可选：在 Linux 下静态链接 libstdc++/libgcc，默认关闭
     option(STATIC_LINK_LIBSTDCPP "Link libstdc++ and libgcc statically on Linux" ON)
 
+    # 注意：input_util.cpp 已改用 uinput（内核虚拟设备），不再依赖 Xtst（XTest）
     list(APPEND EXTRA_LIBS
-        pthread dl rt m X11 Xext Xfixes Xtst Xv z asound
+        pthread dl rt m X11 Xext Xfixes Xv z asound
     )
+endif()
+
+# Windows UAC manifest（requireAdministrator）—— 嵌入资源文件以避免 UIPI 阻断 SendInput
+if(WIN32)
+    set(RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resource/main.rc")
+    # RC 编译时需要能找到 uac.manifest，指定资源目录作为 include 路径
+    if(MSVC)
+        set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} /I\"${CMAKE_CURRENT_SOURCE_DIR}/resource\"")
+    else()
+        set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS} -I\"${CMAKE_CURRENT_SOURCE_DIR}/resource\"")
+    endif()
 endif()
 
 # Add executable
@@ -213,6 +225,11 @@ else()
         ${UI_FILES}
         ${RC_FILE}
     )
+endif()
+
+if(MSVC)
+    # main.rc 已嵌入 MANIFEST，关闭链接器自动生成以避免 CVT1100 重复资源
+    target_link_options(${PROJECT_NAME} PRIVATE /MANIFEST:NO)
 endif()
 
 # 立即为主可执行文件设置输出目录，确保不会落到 third_party/bin
@@ -256,7 +273,7 @@ if(WIN32 AND COMPATIBLE_WIN7)
         AIRAN_COMPATIBLE_WIN7=$<BOOL:${COMPATIBLE_WIN7}>
     )
 endif()
-if(MSVC AND NOT ARCH_64)  # 仅 x86 (32位)
+if(MSVC AND NOT ARCH_64)  # 仅 x86 (32位) + 交叉编译的ffmpeg需要开启
     target_link_options(${PROJECT_NAME} PRIVATE /SAFESEH:NO)
 # 如果启用静态链接选项，则添加链接器选项
 elseif(UNIX AND NOT APPLE AND STATIC_LINK_LIBSTDCPP)

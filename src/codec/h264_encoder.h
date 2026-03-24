@@ -33,6 +33,9 @@ public:
   explicit H264Encoder(QObject *parent = nullptr);
   ~H264Encoder();
 
+  // 当前是否为硬件编码器实例
+  bool isHardwareEncoder() const { return m_codecInfo && m_codecInfo->isHardware; }
+
   // 初始化编码器
   bool initialize(int screenIndex, int dstW, int dstH, int fps = 30);
 

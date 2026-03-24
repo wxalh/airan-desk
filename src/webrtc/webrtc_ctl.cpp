@@ -9,6 +9,7 @@
 #include <QThread>
 #include <QDataStream>
 #include <QUuid>
+#include <QDateTime>
 #include <iostream>
 #include <QPointer>
 
@@ -486,10 +487,21 @@ void WebRtcCtl::setupInputChannelCallbacks()
                            { auto self = weakThis; if(!self) return; LOG_INFO("Input channel opened: {}", channelLabel); });
 
     m_inputChannel->onClosed([weakThis, channelLabel]()
-                             { auto self = weakThis; if(!self) return; LOG_INFO("Input channel closed: {}", channelLabel); });
+                             {
+                                 auto self = weakThis;
+                                 if(!self) return;
+                                 LOG_INFO("Input channel closed: {}", channelLabel);
+                                 // 视频轨道仍可能可用，但输入通道已失效：触发重连恢复
+                                 self->scheduleReconnect();
+                             });
 
     m_inputChannel->onError([weakThis, channelLabel](const std::string &error)
-                            { auto self = weakThis; if(!self) return; LOG_ERROR("Input channel error: {}", error); });
+                            {
+                                auto self = weakThis;
+                                if(!self) return;
+                                LOG_ERROR("Input channel error: {}", error);
+                                self->scheduleReconnect();
+                            });
 
     m_inputChannel->onMessage([weakThis, channelLabel](const rtc::message_variant &message)
                               {
@@ -504,8 +516,8 @@ void WebRtcCtl::setupInputChannelCallbacks()
 
 void WebRtcCtl::parseWsMsg(const QJsonObject &object)
 {
-    // 检查必要字段
-    if (!JsonUtil::hasRequiredKeys(object, {Constant::KEY_ROLE, Constant::KEY_TYPE}))
+    // 忽略非信令消息（如心跳），避免无意义错误日志刷屏
+    if (!object.contains(Constant::KEY_ROLE) || !object.contains(Constant::KEY_TYPE))
         return;
 
     QString role = JsonUtil::getString(object, Constant::KEY_ROLE);
@@ -583,12 +595,39 @@ void WebRtcCtl::inputChannelSendMsg(const rtc::message_variant &data)
               (m_inputChannel != nullptr),
               (m_inputChannel && m_inputChannel->isOpen()));
 
-    if (m_connected && m_inputChannel && m_inputChannel->isOpen())
+    if (m_inputChannel && m_inputChannel->isOpen())
     {
         try
         {
-            m_inputChannel->send(data);
-            LOG_TRACE("Successfully sent input channel message {}", std::get<std::string>(data));
+            bool isMouseMove = false;
+            if (std::holds_alternative<std::string>(data))
+            {
+                const std::string &msg = std::get<std::string>(data);
+                isMouseMove = (msg.find("\"msgType\":\"mouse\"") != std::string::npos &&
+                               msg.find("\"dwFlags\":\"move\"") != std::string::npos);
+            }
+
+            // 弱网保护：鼠标移动事件限流（约 60fps）
+            if (isMouseMove)
+            {
+                qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+                if ((nowMs - m_lastInputMoveSendMs) < 16)
+                    return;
+                m_lastInputMoveSendMs = nowMs;
+
+                // 若发送缓冲区过高，直接丢弃旧 move 事件，避免输入“卡死感”
+                size_t buffered = m_inputChannel->bufferedAmount();
+                if (buffered > 64 * 1024)
+                {
+                    LOG_TRACE("Drop mouse move due to channel backlog: {} bytes", buffered);
+                    return;
+                }
+            }
+
+            if (!m_inputChannel->send(data))
+            {
+                LOG_TRACE("Input message buffered by SCTP");
+            }
         }
         catch (const std::exception &e)
         {
@@ -601,10 +640,18 @@ void WebRtcCtl::inputChannelSendMsg(const rtc::message_variant &data)
     }
     else
     {
-        LOG_WARN("Input channel not ready for sending - connected: {}, channel exists: {}, channel open: {}",
-                 m_connected,
-                 (m_inputChannel != nullptr),
-                 (m_inputChannel && m_inputChannel->isOpen()));
+        // 若输入通道不可用，尝试触发恢复；重复调用由 scheduleReconnect 内部去重
+        scheduleReconnect();
+
+        // 2秒节流一次告警，避免鼠标移动导致日志风暴
+        qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (nowMs - m_lastInputNotReadyLogMs >= 2000)
+        {
+            m_lastInputNotReadyLogMs = nowMs;
+            LOG_WARN("Input channel not ready for sending - channel exists: {}, channel open: {}",
+                     (m_inputChannel != nullptr),
+                     (m_inputChannel && m_inputChannel->isOpen()));
+        }
     }
 }
 
@@ -905,6 +952,13 @@ void WebRtcCtl::scheduleReconnect()
     if (!m_allowReconnect)
         return;
 
+    // 多线程回调只允许首个调用者真正进入调度，避免一次断线瞬间排队多次
+    bool expected = false;
+    if (!m_reconnectPending.compare_exchange_strong(expected, true))
+    {
+        LOG_DEBUG("Reconnect already pending");
+        return;
+    }
 
     if (m_reconnectTimer.isActive())
     {
@@ -913,22 +967,41 @@ void WebRtcCtl::scheduleReconnect()
     }
 
     m_reconnectAttempts++;
+
+    // 首次重连更快，后续指数退避；上限缩短到 15 秒，避免长时间无法控制
+    if (m_reconnectAttempts == 1)
+    {
+        m_reconnectBackoffMs = 3000;
+    }
+    else
+    {
+        m_reconnectBackoffMs = std::min(m_reconnectBackoffMs * 2, 15000);
+    }
+
     LOG_INFO("Scheduling reconnect attempt {}, backoff {} ms", m_reconnectAttempts, m_reconnectBackoffMs);
-    // m_reconnectTimer.setSingleShot(true);
+    // 必须设为单次触发，避免连接成功后定时器仍循环触发重连
+    m_reconnectTimer.setSingleShot(true);
     m_reconnectTimer.setInterval(m_reconnectBackoffMs);
     QMetaObject::invokeMethod(&m_reconnectTimer, "start", Qt::QueuedConnection);
 }
 
 void WebRtcCtl::stopReconnect()
 {
-    if (m_reconnectTimer.isActive())
-        m_reconnectTimer.stop();
+    // QTimer 只能在其所属（Qt 主）线程操作。
+    // libdatachannel 的回调运行在内部 IO 线程，直接调用 stop() 会导致崩溃。
+    // 使用 Qt::QueuedConnection 将 stop() 投递回主线程执行。
+    QMetaObject::invokeMethod(&m_reconnectTimer, "stop", Qt::QueuedConnection);
     m_reconnectAttempts = 0;
+    m_reconnectBackoffMs = 3000; // 重置退避时间，下次重连从头开始
+    m_reconnectPending.store(false);
 }
 
 // 重连执行函数（由定时器触发）
 void WebRtcCtl::doReconnect()
 {
+    // 定时器已触发，允许后续再次调度
+    m_reconnectPending.store(false);
+
     LOG_INFO("Reconnect attempt {} starting", m_reconnectAttempts);
 
     // 清理当前连接（但不影响类级工具对象，若被清理则重建）

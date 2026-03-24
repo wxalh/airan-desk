@@ -55,6 +55,10 @@ WebRtcCli::WebRtcCli(const QString &remoteId, int fps, bool isOnlyFile,
     connect(m_filePacketUtil, &FilePacketUtil::fileDownloadCompleted, this, &WebRtcCli::handleFileReceived);
     connect(m_filePacketUtil, &FilePacketUtil::fileReceived, this, &WebRtcCli::handleFileReceived);
 
+    // 输入通道恢复定时器（防抖，避免弱网抖动时重协商风暴）
+    m_inputChannelRecoverTimer.setSingleShot(true);
+    connect(&m_inputChannelRecoverTimer, &QTimer::timeout, this, &WebRtcCli::recoverInputChannel);
+
     LOG_INFO("created for remote: {}", m_remoteId);
 }
 
@@ -202,9 +206,12 @@ void WebRtcCli::createTracksAndChannels()
             audioDesc.setDirection(rtc::Description::Direction::SendOnly);
             m_audioTrack = m_peerConnection->addTrack(audioDesc);
 
-            // 创建输入数据通道
+            // 创建输入数据通道（低延迟优先：无序 + 最多0次重传）
             LOG_INFO("Creating input data channel");
-            m_inputChannel = m_peerConnection->createDataChannel(Constant::TYPE_INPUT.toStdString());
+            rtc::Reliability inputReliability;
+            inputReliability.unordered = true;
+            inputReliability.maxRetransmits = 0;
+            m_inputChannel = m_peerConnection->createDataChannel(Constant::TYPE_INPUT.toStdString(), {inputReliability});
             setupInputChannelCallbacks();
         }
         // 创建文件数据通道（用于二进制文件传输）
@@ -490,7 +497,13 @@ void WebRtcCli::setupInputChannelCallbacks()
     QPointer<WebRtcCli> weakThis(this);
 
     m_inputChannel->onOpen([weakThis]()
-                           { auto self = weakThis; if(!self) return; LOG_INFO("Input channel opened"); });
+                           {
+                               auto self = weakThis;
+                               if(!self) return;
+                               if (self->m_inputChannelRecoverTimer.isActive())
+                                   self->m_inputChannelRecoverTimer.stop();
+                               LOG_INFO("Input channel opened");
+                           });
 
     m_inputChannel->onMessage([weakThis](auto data)
                               {
@@ -512,10 +525,75 @@ void WebRtcCli::setupInputChannelCallbacks()
         } });
 
     m_inputChannel->onError([weakThis](std::string error)
-                            { auto self = weakThis; if(!self) return; LOG_ERROR("Input channel error: {}", error); });
+                            {
+                                auto self = weakThis;
+                                if(!self) return;
+                                LOG_ERROR("Input channel error: {}", error);
+                                self->scheduleInputChannelRecovery(QString::fromStdString(error));
+                            });
 
     m_inputChannel->onClosed([weakThis]()
-                             { auto self = weakThis; if(!self) return; LOG_INFO("Input channel closed"); });
+                             {
+                                 auto self = weakThis;
+                                 if(!self) return;
+                                 LOG_INFO("Input channel closed");
+                                 self->scheduleInputChannelRecovery("closed");
+                             });
+}
+
+void WebRtcCli::scheduleInputChannelRecovery(const QString &reason)
+{
+    if (m_destroying || m_isOnlyFile || !m_peerConnection)
+        return;
+
+    if (m_inputChannelRecoverTimer.isActive())
+        return;
+
+    LOG_WARN("Input channel unavailable (reason: {}), schedule channel-level renegotiation", reason);
+    m_inputChannelRecoverTimer.start(1200);
+}
+
+void WebRtcCli::recoverInputChannel()
+{
+    if (m_destroying || m_isOnlyFile || !m_peerConnection)
+        return;
+
+    // 若当前通道已经恢复，则跳过
+    if (m_inputChannel && m_inputChannel->isOpen())
+    {
+        LOG_INFO("Input channel already open, skip recovery");
+        return;
+    }
+
+    try
+    {
+        if (m_inputChannel)
+        {
+            try { m_inputChannel->resetCallbacks(); } catch (...) {}
+            try { m_inputChannel->close(); } catch (...) {}
+            m_inputChannel.reset();
+        }
+
+        rtc::Reliability inputReliability;
+        inputReliability.unordered = true;
+        inputReliability.maxRetransmits = 0;
+        m_inputChannel = m_peerConnection->createDataChannel(Constant::TYPE_INPUT.toStdString(), {inputReliability});
+        setupInputChannelCallbacks();
+
+        // 通道级恢复需要重新协商
+        m_peerConnection->createOffer();
+        LOG_INFO("Input channel recreated, renegotiation offer sent");
+    }
+    catch (const std::exception &e)
+    {
+        LOG_ERROR("recoverInputChannel failed: {}", e.what());
+        m_inputChannelRecoverTimer.start(2000);
+    }
+    catch (...)
+    {
+        LOG_ERROR("recoverInputChannel failed: unknown error");
+        m_inputChannelRecoverTimer.start(2000);
+    }
 }
 
 void WebRtcCli::destroy()

@@ -61,6 +61,7 @@ private:
     void setupFileChannelCallbacks();
     void setupFileTextChannelCallbacks();
     void setupInputChannelCallbacks();
+    void scheduleInputChannelRecovery(const QString &reason);
 
     // 成员变量
     QString m_remoteId;
@@ -99,6 +100,9 @@ private:
     // 编码分辨率（根据控制端屏幕分辨率智能计算）
     int m_encode_width;
     int m_encode_height;
+
+    // 输入通道恢复（弱网下 input channel 退化时仅做通道级重协商）
+    QTimer m_inputChannelRecoverTimer;
 signals:
     // WebSocket消息发送
     void sendWsCliBinaryMsg(const QByteArray &message);
@@ -117,6 +121,7 @@ public slots:
     void onVideoFrameReady(const QString &subscriberId, std::shared_ptr<rtc::binary> encodedData, quint64 timestamp_us);
 
     void handleFileReceived(bool status, const QString &tempPath);
+    void recoverInputChannel();
 
 private:
     // 消息解析

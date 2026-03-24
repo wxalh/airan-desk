@@ -20,6 +20,7 @@
 #include <QSettings>
 #include <QUuid>
 #include <memory>
+#include <atomic>
 #include "../util/input_util.h"
 #include "../util/json_util.h"
 #include "../common/constant.h"
@@ -107,6 +108,11 @@ private:
     int m_reconnectAttempts = 0;
     int m_reconnectBackoffMs = 5000; // 基本退避时间（ms）
     bool m_allowReconnect = true;    // 是否允许自动重连
+    std::atomic_bool m_reconnectPending{false}; // 防止多线程回调重复调度重连
+
+    // 输入通道发送侧弱网保护：鼠标移动限流（ms 时间戳）
+    qint64 m_lastInputMoveSendMs = 0;
+    qint64 m_lastInputNotReadyLogMs = 0;
 
 private slots:
     void doReconnect();
