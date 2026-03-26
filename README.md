@@ -98,7 +98,7 @@ airan-desk 是一个基于 WebRTC 技术的远程桌面控制应用程序，支�
   "architecture": "win32",
   "toolset": "host=x86",
   "cacheVariables": {
-    "QT5_DIR": "C:/Qt/5.15.2/msvc2019",
+    "Qt5_DIR": "C:/Qt/5.15.2/msvc2019",
     "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32",
     "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win32-gpl-shared-7.1"
   }
@@ -115,7 +115,7 @@ airan-desk 是一个基于 WebRTC 技术的远程桌面控制应用程序，支�
   "architecture": "x64",
   "toolset": "host=x64",
   "cacheVariables": {
-    "QT5_DIR": "C:/Qt/5.15.2/msvc2019_64",
+    "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64",
     "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64",
     "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win64-gpl-shared-7.1"
   }
