@@ -15,7 +15,7 @@
         "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
       },
       "cacheVariables": {
-        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64",
+        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5",
         "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64",
         "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1"
       }
@@ -30,7 +30,7 @@
         "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
       },
       "cacheVariables": {
-        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64",
+        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5",
         "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64",
         "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win64-lgpl-shared-7.1"
       }
@@ -45,7 +45,7 @@
         "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
       },
       "cacheVariables": {
-        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019",
+        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019/lib/cmake/Qt5",
         "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32",
         "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win32-lgpl-shared-7.1",
         "COMPATIBLE_WIN7": "ON"
@@ -61,7 +61,7 @@
         "VCINSTALLDIR": "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/"
       },
       "cacheVariables": {
-        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019",
+        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019/lib/cmake/Qt5",
         "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32",
         "FFMPEG_ROOT_DIR": "D:/lib/ffmpeg/ffmpeg-n7.1-latest-win32-lgpl-shared-7.1",
         "COMPATIBLE_WIN7": "ON"
