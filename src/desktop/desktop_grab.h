@@ -1,6 +1,7 @@
 #ifndef DESKTOP_GRAB_H
 #define DESKTOP_GRAB_H
 
+#include <QtGlobal>
 #include <QObject>
 #include <QMutex>
 #include <chrono>

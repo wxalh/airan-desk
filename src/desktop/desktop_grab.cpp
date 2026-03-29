@@ -55,6 +55,7 @@ bool isWin8OrGreater(const WinVersion &v)
 
 std::shared_ptr<DesktopGrab> DesktopGrab::createBestDesktopGrabber(int screenIndex, QObject *parent)
 {
+#if defined(Q_OS_WIN64) || defined(Q_OS_WIN32)
 #if !defined(AIRAN_COMPATIBLE_WIN7)
     const WinVersion winVer = queryWindowsVersion();
     LOG_INFO("DesktopGrab backend select by runtime OS version: {}.{}", winVer.major, winVer.minor);
@@ -84,6 +85,7 @@ std::shared_ptr<DesktopGrab> DesktopGrab::createBestDesktopGrabber(int screenInd
     {
         LOG_INFO("Windows version below 8 detected, skip WGC/DXGI and use Qt grabber");
     }
+#endif
 #endif
 
     // 如果 DXGI 不可用或非 Windows，使用 Qt 实现

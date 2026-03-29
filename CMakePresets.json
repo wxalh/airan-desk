@@ -78,13 +78,25 @@
       }
     },
     {
-      "name": "linux-arm",
-      "displayName": "linux-arm (ARMv7)",
+      "name": "linux-arm64",
+      "displayName": "linux-arm64",
       "generator": "Unix Makefiles",
-      "binaryDir": "${sourceDir}/out/build/linux-arm",
+      "binaryDir": "${sourceDir}/out/build/linux-arm64",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_CXX_COMPILER": "g++"
+        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+        "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++",
+        "CMAKE_FIND_ROOT_PATH": "/usr/lib/aarch64-linux-gnu"
+      }
+    },
+    {
+      "name": "linux-armhf",
+      "displayName": "linux-armhf",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/linux-armhf",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "arm-linux-gnueabihf-gcc",
+        "CMAKE_CXX_COMPILER": "arm-linux-gnueabihf-g++",
+        "CMAKE_FIND_ROOT_PATH": "/usr/lib/arm-linux-gnueabihf"
       }
     }
   ],
@@ -115,8 +127,13 @@
       "configuration": "Release"
     },
     {
-      "name": "linux-arm",
-      "configurePreset": "linux-arm",
+      "name": "linux-arm64",
+      "configurePreset": "linux-arm64",
+      "configuration": "Release"
+    },
+    {
+      "name": "linux-armhf",
+      "configurePreset": "linux-armhf",
       "configuration": "Release"
     }
   ]
