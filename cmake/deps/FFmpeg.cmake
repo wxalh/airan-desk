@@ -1,0 +1,202 @@
+option(AIRAN_ENABLE_FFMPEG_RUNTIME "Enable the optional dynamically loaded FFmpeg codec backend" ON)
+set(AIRAN_FFMPEG_ROOT "" CACHE PATH "Path to an FFmpeg shared/dev package")
+
+# Input names are part of the FFmpeg-Builds artifact contract. Destination
+# names are stable package inventory names under licenses/.
+set(AIRAN_FFMPEG_METADATA_INPUT_NAMES
+    LICENSE.txt
+    SOURCE_REVISION.txt
+    FFMPEG_BUILDS_REVISION.txt
+    BUILD_CONFIGURATION.txt
+    DEPENDENCIES.txt
+    SHA256SUMS
+    SOURCE_URLS.txt)
+set(AIRAN_FFMPEG_METADATA_OUTPUT_NAMES
+    FFmpeg-LICENSE.txt
+    FFmpeg-source-revision.txt
+    FFmpeg-builds-revision.txt
+    FFmpeg-build-configuration.txt
+    FFmpeg-dependencies.txt
+    FFmpeg-SHA256SUMS
+    FFmpeg-SOURCE_URLS.txt)
+set(AIRAN_FFMPEG_METADATA_COPY_PAIRS)
+
+if(NOT AIRAN_ENABLE_FFMPEG_RUNTIME)
+    set(AIRAN_FFMPEG_AVAILABLE FALSE)
+    message(STATUS "Optional FFmpeg codec backend disabled; WebRTC internal codecs remain available")
+
+    function(airan_use_ffmpeg_runtime target_name)
+    endfunction()
+
+    return()
+endif()
+
+if(WIN32)
+    if(WEBRTC_WINDOWS_PLATFORM STREQUAL "win7")
+        set(_airan_ffmpeg_major "7.1")
+        set(_airan_ffmpeg_suffix "7.1")
+    else()
+        set(_airan_ffmpeg_major "8.1")
+        set(_airan_ffmpeg_suffix "8.1")
+    endif()
+
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64"
+       OR CMAKE_VS_PLATFORM_NAME MATCHES "ARM64")
+        set(_airan_ffmpeg_default_root
+            "${CMAKE_SOURCE_DIR}/third_party/ffmpeg-builds/ffmpeg-n${_airan_ffmpeg_major}-latest-winarm64-lgpl-shared-${_airan_ffmpeg_suffix}")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(_airan_ffmpeg_default_root
+            "${CMAKE_SOURCE_DIR}/third_party/ffmpeg-builds/ffmpeg-n${_airan_ffmpeg_major}-latest-win64-lgpl-shared-${_airan_ffmpeg_suffix}")
+    else()
+        set(_airan_ffmpeg_default_root
+            "${CMAKE_SOURCE_DIR}/third_party/ffmpeg-builds/ffmpeg-n${_airan_ffmpeg_major}-latest-win32-lgpl-shared-${_airan_ffmpeg_suffix}")
+    endif()
+elseif(UNIX AND NOT APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "armv7|armhf|arm")
+        set(_airan_ffmpeg_platform "linuxarmhf")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
+        set(_airan_ffmpeg_platform "linuxarm64")
+    else()
+        set(_airan_ffmpeg_platform "linux64")
+    endif()
+    set(_airan_ffmpeg_default_root
+        "${CMAKE_SOURCE_DIR}/third_party/ffmpeg-builds/ffmpeg-n8.1-latest-${_airan_ffmpeg_platform}-lgpl-shared-8.1")
+else()
+    set(_airan_ffmpeg_default_root "")
+endif()
+
+if(NOT AIRAN_FFMPEG_ROOT AND _airan_ffmpeg_default_root)
+    set(AIRAN_FFMPEG_ROOT "${_airan_ffmpeg_default_root}"
+        CACHE PATH "Path to an FFmpeg shared/dev package" FORCE)
+endif()
+
+set(AIRAN_FFMPEG_INCLUDE_DIR "${AIRAN_FFMPEG_ROOT}/include")
+set(AIRAN_FFMPEG_LIB_DIR "${AIRAN_FFMPEG_ROOT}/lib")
+set(AIRAN_FFMPEG_BIN_DIR "${AIRAN_FFMPEG_ROOT}/bin")
+set(AIRAN_FFMPEG_EXECUTABLE "${AIRAN_FFMPEG_BIN_DIR}/ffmpeg${CMAKE_EXECUTABLE_SUFFIX}")
+set(AIRAN_FFMPEG_RUNTIME_DLLS)
+set(AIRAN_FFMPEG_AVCODEC_RUNTIME "")
+set(_airan_ffmpeg_missing_core)
+
+set(_airan_ffmpeg_required_headers
+    libavcodec/avcodec.h
+    libavfilter/avfilter.h
+    libavfilter/buffersink.h
+    libavfilter/buffersrc.h
+    libavutil/buffer.h
+    libavutil/error.h
+    libavutil/frame.h
+    libavutil/hwcontext.h
+    libavutil/mem.h
+    libavutil/opt.h
+    libswscale/swscale.h)
+if(WIN32)
+    list(APPEND _airan_ffmpeg_required_headers
+        libavutil/hwcontext_d3d11va.h)
+endif()
+foreach(_airan_ffmpeg_header IN LISTS _airan_ffmpeg_required_headers)
+    if(NOT EXISTS "${AIRAN_FFMPEG_INCLUDE_DIR}/${_airan_ffmpeg_header}")
+        list(APPEND _airan_ffmpeg_missing_core
+            "include/${_airan_ffmpeg_header}")
+    endif()
+endforeach()
+if(NOT IS_DIRECTORY "${AIRAN_FFMPEG_LIB_DIR}")
+    list(APPEND _airan_ffmpeg_missing_core "lib/")
+endif()
+
+set(_airan_ffmpeg_runtime_components
+    avcodec avutil swresample avfilter swscale)
+if(WIN32)
+    foreach(_airan_ffmpeg_lib avcodec avfilter avutil swscale)
+        if(NOT EXISTS "${AIRAN_FFMPEG_LIB_DIR}/${_airan_ffmpeg_lib}.lib")
+            list(APPEND _airan_ffmpeg_missing_core "lib/${_airan_ffmpeg_lib}.lib")
+        endif()
+    endforeach()
+    file(GLOB AIRAN_FFMPEG_RUNTIME_DLLS "${AIRAN_FFMPEG_BIN_DIR}/*.dll")
+elseif(APPLE)
+    file(GLOB AIRAN_FFMPEG_RUNTIME_DLLS "${AIRAN_FFMPEG_LIB_DIR}/*.dylib")
+else()
+    file(GLOB AIRAN_FFMPEG_RUNTIME_DLLS "${AIRAN_FFMPEG_LIB_DIR}/*.so*")
+endif()
+foreach(_airan_ffmpeg_runtime_component IN LISTS _airan_ffmpeg_runtime_components)
+    if(WIN32)
+        file(GLOB _airan_ffmpeg_runtime_candidates
+            "${AIRAN_FFMPEG_BIN_DIR}/${_airan_ffmpeg_runtime_component}*.dll")
+    elseif(APPLE)
+        file(GLOB _airan_ffmpeg_runtime_candidates
+            "${AIRAN_FFMPEG_LIB_DIR}/lib${_airan_ffmpeg_runtime_component}*.dylib")
+    else()
+        file(GLOB _airan_ffmpeg_runtime_candidates
+            "${AIRAN_FFMPEG_LIB_DIR}/lib${_airan_ffmpeg_runtime_component}.so*")
+    endif()
+    if(_airan_ffmpeg_runtime_candidates)
+        if(_airan_ffmpeg_runtime_component STREQUAL "avcodec")
+            list(GET _airan_ffmpeg_runtime_candidates 0
+                AIRAN_FFMPEG_AVCODEC_RUNTIME)
+        endif()
+    else()
+        list(APPEND _airan_ffmpeg_missing_core
+            "${_airan_ffmpeg_runtime_component} shared runtime")
+    endif()
+endforeach()
+
+if(_airan_ffmpeg_missing_core)
+    list(JOIN _airan_ffmpeg_missing_core ", " _airan_ffmpeg_missing_core_text)
+    set(AIRAN_FFMPEG_AVAILABLE FALSE)
+    message(WARNING
+        "FFmpeg package is incomplete at ${AIRAN_FFMPEG_ROOT}; disabling the dynamic backend for this development build. Missing: ${_airan_ffmpeg_missing_core_text}")
+else()
+    set(AIRAN_FFMPEG_AVAILABLE TRUE)
+    message(STATUS "Using FFmpeg runtime package: ${AIRAN_FFMPEG_ROOT}")
+endif()
+
+if(NOT EXISTS "${AIRAN_FFMPEG_EXECUTABLE}")
+    message(WARNING "FFmpeg executable is missing: ${AIRAN_FFMPEG_EXECUTABLE}")
+endif()
+
+set(_airan_ffmpeg_missing_metadata)
+set(_airan_ffmpeg_metadata_candidates)
+list(LENGTH AIRAN_FFMPEG_METADATA_INPUT_NAMES _airan_ffmpeg_metadata_count)
+math(EXPR _airan_ffmpeg_metadata_last "${_airan_ffmpeg_metadata_count} - 1")
+foreach(_index RANGE 0 ${_airan_ffmpeg_metadata_last})
+    list(GET AIRAN_FFMPEG_METADATA_INPUT_NAMES ${_index} _input_name)
+    list(GET AIRAN_FFMPEG_METADATA_OUTPUT_NAMES ${_index} _output_name)
+    set(_source "${AIRAN_FFMPEG_ROOT}/${_input_name}")
+    if(EXISTS "${_source}")
+        list(APPEND _airan_ffmpeg_metadata_candidates "${_source}|${_output_name}")
+    else()
+        list(APPEND _airan_ffmpeg_missing_metadata "${_input_name}")
+    endif()
+endforeach()
+if(_airan_ffmpeg_missing_metadata)
+    list(JOIN _airan_ffmpeg_missing_metadata ", " _airan_ffmpeg_missing_metadata_text)
+    message(WARNING
+        "FFmpeg metadata is incomplete for this development build: ${_airan_ffmpeg_missing_metadata_text}")
+else()
+    set(AIRAN_FFMPEG_METADATA_COPY_PAIRS
+        ${_airan_ffmpeg_metadata_candidates})
+endif()
+
+if(AIRAN_FFMPEG_AVAILABLE AND WIN32)
+    foreach(_airan_ffmpeg_lib avcodec avfilter avutil swscale)
+        if(NOT TARGET FFmpeg::${_airan_ffmpeg_lib})
+            add_library(FFmpeg::${_airan_ffmpeg_lib} UNKNOWN IMPORTED)
+            set_target_properties(FFmpeg::${_airan_ffmpeg_lib} PROPERTIES
+                IMPORTED_LOCATION "${AIRAN_FFMPEG_LIB_DIR}/${_airan_ffmpeg_lib}.lib"
+                INTERFACE_INCLUDE_DIRECTORIES "${AIRAN_FFMPEG_INCLUDE_DIR}")
+        endif()
+    endforeach()
+endif()
+
+function(airan_use_ffmpeg_runtime target_name)
+    if(NOT AIRAN_FFMPEG_AVAILABLE)
+        return()
+    endif()
+    target_include_directories(${target_name} BEFORE PRIVATE "${AIRAN_FFMPEG_INCLUDE_DIR}")
+    target_compile_definitions(${target_name} PRIVATE AIRAN_HAVE_FFMPEG=1)
+    foreach(_airan_ffmpeg_runtime ${AIRAN_FFMPEG_RUNTIME_DLLS})
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_airan_ffmpeg_runtime}" "$<TARGET_FILE_DIR:${target_name}>")
+    endforeach()
+endfunction()

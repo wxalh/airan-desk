@@ -1,0 +1,37 @@
+out
+build
+.*
+!.github/
+*.txt.user
+*.pro.user
+resource/locale/*.qm
+
+# 显式放行 webrtc 和 ffmpeg-builds 目录本身
+!third_party/webrtc/
+!third_party/ffmpeg-builds/
+!third_party/linux-runtime/
+
+# 忽略这两个目录内的所有内容，但保留 .gitkeep
+third_party/webrtc/*
+!third_party/webrtc/.gitkeep
+
+third_party/ffmpeg-builds/*
+!third_party/ffmpeg-builds/.gitkeep
+
+third_party/linux-runtime/*
+!third_party/linux-runtime/.gitkeep
+
+third_party/_downloads/
+/tests
+docs
+# Python tooling and website/release development caches
+__pycache__/
+*.py[cod]
+
+# Keep release-contract tests and their fixtures in the repository.
+!tools/tests/verify_openh264_release_contract.cmake
+!tools/tests/verify_ffmpeg_metadata_fixtures.cmake
+!tools/tests/verify_ffmpeg_release_gate_fixtures.cmake
+!tools/tests/openh264_binary_manager_test.cpp
+!tools/tests/openh264_config_test.cpp
+!tools/tests/openh264_ffmpeg_option_test.cpp

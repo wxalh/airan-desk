@@ -1,0 +1,348 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21
+  },
+  "configurePresets": [
+    {
+      "name": "base-windows-vs2022",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "WEBRTC_MSVC_RUNTIME": "md",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
+        "AIRAN_ENABLE_FFMPEG_RUNTIME": "ON"
+      }
+    },
+    {
+      "name": "base-win64",
+      "hidden": true,
+      "inherits": "base-windows-vs2022",
+      "architecture": "x64",
+      "toolset": "host=x64",
+      "cacheVariables": {
+        "OPENSSL_ROOT_DIR": "C:/Program Files/OpenSSL-Win64"
+      }
+    },
+    {
+      "name": "base-win32",
+      "hidden": true,
+      "inherits": "base-windows-vs2022",
+      "architecture": "win32",
+      "toolset": "host=x86",
+      "cacheVariables": {
+        "OPENSSL_ROOT_DIR": "C:/Program Files (x86)/OpenSSL-Win32"
+      }
+    },
+    {
+      "name": "base-winarm64",
+      "hidden": true,
+      "inherits": "base-windows-vs2022",
+      "architecture": "ARM64",
+      "toolset": "host=x64"
+    },
+    {
+      "name": "base-win10-webrtc",
+      "hidden": true,
+      "cacheVariables": {
+        "WEBRTC_WINDOWS_PLATFORM": "win10",
+        "WEBRTC_MILESTONE": "m144"
+      }
+    },
+    {
+      "name": "base-win7-webrtc",
+      "hidden": true,
+      "cacheVariables": {
+        "WEBRTC_WINDOWS_PLATFORM": "win7",
+        "WEBRTC_MILESTONE": "m109"
+      }
+    },
+    {
+      "name": "base-linux",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "WEBRTC_MILESTONE": "m144",
+        "WEBRTC_LINUX_STL": "gnu",
+        "WEBRTC_LINUX_COMPAT": "ubuntu18",
+        "AIRAN_ENABLE_FFMPEG_RUNTIME": "ON"
+      }
+    },
+    {
+      "name": "base-macos",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "12.0",
+        "WEBRTC_MILESTONE": "m144",
+        "AIRAN_ENABLE_FFMPEG_RUNTIME": "OFF"
+      }
+    },
+    {
+      "name": "linux-gcc",
+      "hidden": true,
+      "inherits": "base-linux",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "win10-x64",
+      "displayName": "win10-x64",
+      "inherits": [
+        "base-win64",
+        "base-win10-webrtc"
+      ],
+      "cacheVariables": {
+        "Qt5_DIR": "C:/Qt/5.15.2/msvc2019_64/lib/cmake/Qt5"
+      }
+    },
+    {
+      "name": "win10-arm64",
+      "displayName": "win10-arm64",
+      "inherits": [
+        "base-winarm64",
+        "base-win10-webrtc"
+      ],
+      "cacheVariables": {
+        "Qt6_DIR": "C:/Qt/6.8.3/msvc2022_arm64/lib/cmake/Qt6"
+      }
+    },
+    {
+      "name": "win7-x86",
+      "displayName": "win7-x86",
+      "inherits": [
+        "base-win32",
+        "base-win7-webrtc"
+      ],
+      "cacheVariables": {
+        "Qt5_DIR": "C:/Qt/5.9.9/msvc2015/lib/cmake/Qt5"
+      }
+    },
+    {
+      "name": "linux-x86",
+      "displayName": "linux-x86",
+      "inherits": "linux-gcc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_FLAGS": "-m32",
+        "CMAKE_CXX_FLAGS": "-m32",
+        "CMAKE_EXE_LINKER_FLAGS": "-m32",
+        "CMAKE_SHARED_LINKER_FLAGS": "-m32"
+      }
+    },
+    {
+      "name": "macos-x64",
+      "displayName": "macos-x64",
+      "inherits": "base-macos",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64",
+        "CMAKE_PREFIX_PATH": "/usr/local/opt/qt@5",
+        "WEBRTC_MILESTONE": "m144"
+      }
+    },
+    {
+      "name": "macos-x64-debug",
+      "displayName": "macos-x64-debug",
+      "inherits": "macos-x64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "macos-arm64",
+      "displayName": "macos-arm64",
+      "inherits": "base-macos",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/qt@5",
+        "WEBRTC_MILESTONE": "m144"
+      }
+    },
+    {
+      "name": "macos-arm64-debug",
+      "displayName": "macos-arm64-debug",
+      "inherits": "macos-arm64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-x86-debug",
+      "displayName": "linux-x86-debug",
+      "inherits": "linux-x86",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-x64",
+      "displayName": "linux-x64",
+      "inherits": "linux-gcc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-x64-debug",
+      "displayName": "linux-x64-debug",
+      "inherits": "linux-x64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-arm64",
+      "displayName": "linux-arm64",
+      "inherits": "base-linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+        "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++",
+        "CMAKE_FIND_ROOT_PATH": "/usr/lib/aarch64-linux-gnu"
+      }
+    },
+    {
+      "name": "linux-arm64-debug",
+      "displayName": "linux-arm64-debug",
+      "inherits": "linux-arm64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-armhf",
+      "displayName": "linux-armhf",
+      "inherits": "base-linux",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "arm-linux-gnueabihf-gcc",
+        "CMAKE_CXX_COMPILER": "arm-linux-gnueabihf-g++",
+        "CMAKE_FIND_ROOT_PATH": "/usr/lib/arm-linux-gnueabihf"
+      }
+    },
+    {
+      "name": "linux-armhf-debug",
+      "displayName": "linux-armhf-debug",
+      "inherits": "linux-armhf",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "base-build",
+      "hidden": true,
+      "jobs": 4
+    },
+    {
+      "name": "base-release-build",
+      "hidden": true,
+      "inherits": "base-build",
+      "configuration": "Release"
+    },
+    {
+      "name": "base-debug-build",
+      "hidden": true,
+      "inherits": "base-build",
+      "configuration": "Debug"
+    },
+    {
+      "name": "win10-x64-release",
+      "inherits": "base-release-build",
+      "configurePreset": "win10-x64"
+    },
+    {
+      "name": "win10-x64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "win10-x64"
+    },
+    {
+      "name": "win10-arm64-release",
+      "inherits": "base-release-build",
+      "configurePreset": "win10-arm64"
+    },
+    {
+      "name": "win10-arm64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "win10-arm64"
+    },
+    {
+      "name": "win7-x86-release",
+      "inherits": "base-release-build",
+      "configurePreset": "win7-x86"
+    },
+    {
+      "name": "win7-x86-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "win7-x86"
+    },
+    {
+      "name": "linux-x86",
+      "inherits": "base-release-build",
+      "configurePreset": "linux-x86"
+    },
+    {
+      "name": "linux-x86-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "linux-x86-debug"
+    },
+    {
+      "name": "macos-x64",
+      "inherits": "base-release-build",
+      "configurePreset": "macos-x64"
+    },
+    {
+      "name": "macos-x64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "macos-x64-debug"
+    },
+    {
+      "name": "macos-arm64",
+      "inherits": "base-release-build",
+      "configurePreset": "macos-arm64"
+    },
+    {
+      "name": "macos-arm64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "macos-arm64-debug"
+    },
+    {
+      "name": "linux-x64",
+      "inherits": "base-release-build",
+      "configurePreset": "linux-x64"
+    },
+    {
+      "name": "linux-x64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "linux-x64-debug"
+    },
+    {
+      "name": "linux-arm64",
+      "inherits": "base-release-build",
+      "configurePreset": "linux-arm64"
+    },
+    {
+      "name": "linux-arm64-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "linux-arm64-debug"
+    },
+    {
+      "name": "linux-armhf",
+      "inherits": "base-release-build",
+      "configurePreset": "linux-armhf"
+    },
+    {
+      "name": "linux-armhf-debug",
+      "inherits": "base-debug-build",
+      "configurePreset": "linux-armhf-debug"
+    }
+  ]
+}

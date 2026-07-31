@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "Airan Desk";
+"NSAppleEventsUsageDescription" = "Airan Desk uses System Events only when you explicitly request a remote lock, sign out, restart, or shutdown.";
+"NSMicrophoneUsageDescription" = "Airan Desk uses the microphone when you enable a remote audio call.";

@@ -1,0 +1,73 @@
+#!/usr/bin/env sh
+set -eu
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+real_exe="$script_dir/airan-desk.real"
+app_dir="$script_dir"
+if [ ! -d "$app_dir/lib" ] && [ -d "$script_dir/../lib" ]; then
+    app_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd)
+fi
+lib_dir="$app_dir/lib"
+conf_dir="$script_dir/conf"
+vaapi_driver_env="$conf_dir/linux-vaapi-driver.env"
+uinput_helper="$script_dir/airan-desk-ensure-uinput-rule"
+uinput_rule=""
+
+for candidate in \
+    "$script_dir/60-airan-desk-uinput.rules" \
+    "$app_dir/share/airan-desk/60-airan-desk-uinput.rules"
+do
+    if [ -f "$candidate" ]; then
+        uinput_rule=$candidate
+        break
+    fi
+done
+
+skip_uinput_setup=${AIRAN_DESK_SKIP_UINPUT_SETUP:-0}
+case "${1:-}" in
+    -v|-V|--version) skip_uinput_setup=1 ;;
+esac
+if [ "$skip_uinput_setup" != "1" ] && [ -x "$uinput_helper" ] && [ -n "$uinput_rule" ]; then
+    "$uinput_helper" "$uinput_rule" || true
+fi
+
+if [ ! -x "$real_exe" ]; then
+    echo "Airan Desk runtime executable was not found: $real_exe" >&2
+    exit 127
+fi
+
+runtime_lib_path="$lib_dir:$lib_dir/codecs:$script_dir:$script_dir/codecs"
+if [ "${LD_LIBRARY_PATH+x}" = x ]; then
+    export AIRAN_DESK_LD_LIBRARY_PATH_WAS_SET=1
+    export AIRAN_DESK_ORIGINAL_LD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+else
+    export AIRAN_DESK_LD_LIBRARY_PATH_WAS_SET=0
+    unset AIRAN_DESK_ORIGINAL_LD_LIBRARY_PATH
+fi
+if [ -n "${LD_LIBRARY_PATH:-}" ]; then
+    export LD_LIBRARY_PATH="$runtime_lib_path:$LD_LIBRARY_PATH"
+else
+    export LD_LIBRARY_PATH="$runtime_lib_path"
+fi
+export QT_PLUGIN_PATH="$app_dir/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$app_dir/plugins/platforms"
+
+if [ -d "$lib_dir/pipewire-0.3" ]; then
+    export PIPEWIRE_MODULE_DIR="$lib_dir/pipewire-0.3"
+fi
+if [ -d "$lib_dir/spa-0.2" ]; then
+    export SPA_PLUGIN_DIR="$lib_dir/spa-0.2"
+fi
+if [ -d "$lib_dir/pipewire-config" ]; then
+    export PIPEWIRE_CONFIG_DIR="$lib_dir/pipewire-config"
+fi
+
+if [ -z "${LIBVA_DRIVER_NAME:-}" ] && [ -f "$vaapi_driver_env" ]; then
+    # shellcheck disable=SC1090
+    . "$vaapi_driver_env"
+    if [ -n "${LIBVA_DRIVER_NAME:-}" ]; then
+        export LIBVA_DRIVER_NAME
+    fi
+fi
+
+exec "$real_exe" "$@"

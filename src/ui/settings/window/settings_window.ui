@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsWindow</class>
+ <widget class="QDialog" name="SettingsWindow">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>720</width><height>520</height></rect>
+  </property>
+  <property name="windowTitle">
+   <string>Settings</string>
+  </property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing"><number>0</number></property>
+   <property name="leftMargin"><number>0</number></property>
+   <property name="topMargin"><number>0</number></property>
+   <property name="rightMargin"><number>0</number></property>
+   <property name="bottomMargin"><number>0</number></property>
+   <item>
+    <widget class="QWidget" name="titleBarHost">
+     <layout class="QVBoxLayout" name="titleBarLayout">
+      <property name="spacing"><number>0</number></property>
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QWidget" name="settingsContent">
+     <layout class="QVBoxLayout" name="contentLayout">
+      <property name="spacing"><number>10</number></property>
+      <property name="leftMargin"><number>12</number></property>
+      <property name="topMargin"><number>12</number></property>
+      <property name="rightMargin"><number>12</number></property>
+      <property name="bottomMargin"><number>12</number></property>
+      <item>
+       <widget class="QTabWidget" name="settingsTabs">
+        <property name="currentIndex"><number>0</number></property>
+        <widget class="QWidget" name="generalSettingsPage">
+         <attribute name="title"><string>General</string></attribute>
+         <layout class="QFormLayout" name="generalFormLayout">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
+          <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
+          <property name="formAlignment"><set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set></property>
+          <property name="horizontalSpacing"><number>14</number></property>
+          <property name="verticalSpacing"><number>10</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <item row="0" column="0"><widget class="QLabel" name="controlledAccessLabel"><property name="text"><string>Controlled access</string></property></widget></item>
+          <item row="0" column="1"><widget class="QCheckBox" name="allowRemoteCheck"><property name="text"><string>Allow this device to be remotely controlled</string></property></widget></item>
+          <item row="1" column="0"><widget class="QLabel" name="autoStartLabel"><property name="text"><string>Startup</string></property></widget></item>
+          <item row="1" column="1"><widget class="QCheckBox" name="autoStartCheck"><property name="text"><string>Start Airan Desk when I sign in</string></property></widget></item>
+          <item row="2" column="0"><widget class="QLabel" name="logLevelLabel"><property name="text"><string>Log level</string></property></widget></item>
+          <item row="2" column="1"><widget class="QComboBox" name="logLevelCombo"/></item>
+          <item row="3" column="0"><widget class="QLabel" name="languageLabel"><property name="text"><string>Language</string></property></widget></item>
+          <item row="3" column="1"><widget class="QComboBox" name="languageCombo"/></item>
+          <item row="4" column="0"><widget class="QLabel" name="notificationScriptLabel"><property name="text"><string>Notification script</string></property></widget></item>
+           <item row="4" column="1">
+           <widget class="QWidget" name="notificationScriptHost">
+            <layout class="QHBoxLayout" name="notificationScriptLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QLineEdit" name="notificationScriptEdit"/></item>
+             <item><widget class="QPushButton" name="notificationScriptBrowseButton"><property name="text"><string>Browse...</string></property></widget></item>
+             <item><widget class="QPushButton" name="notificationScriptTestButton"><property name="text"><string>Test</string></property></widget></item>
+            </layout>
+           </widget>
+           </item>
+           <item row="5" column="0"><widget class="QLabel" name="thirdPartyLicensesLabel"><property name="text"><string>Licenses</string></property></widget></item>
+           <item row="5" column="1"><widget class="QPushButton" name="thirdPartyLicensesButton"><property name="text"><string>Third-party licenses...</string></property></widget></item>
+          </layout>
+        </widget>
+        <widget class="QWidget" name="connectionSettingsPage">
+          <attribute name="title"><string>Server</string></attribute>
+         <layout class="QFormLayout" name="connectionFormLayout">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
+          <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
+          <property name="formAlignment"><set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set></property>
+          <property name="horizontalSpacing"><number>14</number></property>
+          <property name="verticalSpacing"><number>10</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <item row="0" column="0"><widget class="QLabel" name="wsUrlLabel"><property name="text"><string>WebSocket URL</string></property></widget></item>
+          <item row="0" column="1"><widget class="QLineEdit" name="wsUrlEdit"/></item>
+          <item row="1" column="0"><widget class="QLabel" name="iceHostLabel"><property name="text"><string>ICE host</string></property></widget></item>
+          <item row="1" column="1"><widget class="QLineEdit" name="iceHostEdit"/></item>
+          <item row="2" column="0"><widget class="QLabel" name="icePortLabel"><property name="text"><string>ICE port</string></property></widget></item>
+          <item row="2" column="1"><widget class="QSpinBox" name="icePortSpin"/></item>
+          <item row="3" column="0"><widget class="QLabel" name="iceUserLabel"><property name="text"><string>ICE username</string></property></widget></item>
+          <item row="3" column="1"><widget class="QLineEdit" name="iceUserEdit"/></item>
+          <item row="4" column="0"><widget class="QLabel" name="icePasswordLabel"><property name="text"><string>ICE password</string></property></widget></item>
+          <item row="4" column="1"><widget class="QLineEdit" name="icePasswordEdit"/></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="audioSettingsPage">
+         <attribute name="title"><string>Audio</string></attribute>
+         <layout class="QFormLayout" name="audioFormLayout">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
+          <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
+          <property name="formAlignment"><set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set></property>
+          <property name="horizontalSpacing"><number>14</number></property>
+          <property name="verticalSpacing"><number>10</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <item row="0" column="0"><widget class="QLabel" name="audioMicDeviceLabel"><property name="text"><string>Default microphone</string></property></widget></item>
+          <item row="0" column="1">
+           <widget class="QWidget" name="audioMicHost">
+            <layout class="QHBoxLayout" name="audioMicLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QComboBox" name="audioMicDeviceCombo"><property name="editable"><bool>false</bool></property></widget></item>
+             <item><widget class="QPushButton" name="testMicBtn"><property name="text"><string>Test</string></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+          <item row="1" column="0"><widget class="QLabel" name="audioLoopbackDeviceLabel"><property name="text"><string>Default speaker</string></property></widget></item>
+          <item row="1" column="1">
+           <widget class="QWidget" name="audioSpeakerHost">
+            <layout class="QHBoxLayout" name="audioSpeakerLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QComboBox" name="audioLoopbackDeviceCombo"><property name="editable"><bool>false</bool></property></widget></item>
+             <item><widget class="QPushButton" name="testSpeakerBtn"><property name="text"><string>Test</string></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+          <item row="2" column="0"><widget class="QLabel" name="audioDeviceActionLabel"><property name="text"><string>Audio tools</string></property></widget></item>
+          <item row="2" column="1">
+           <widget class="QWidget" name="audioToolsHost">
+            <layout class="QHBoxLayout" name="audioToolsLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QPushButton" name="refreshAudioDevicesBtn"><property name="text"><string>Refresh devices</string></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+          <item row="3" column="0"><widget class="QLabel" name="audioMicLevelLabel"><property name="text"><string>Microphone level</string></property></widget></item>
+          <item row="3" column="1"><widget class="QProgressBar" name="micLevelBar"><property name="minimum"><number>0</number></property><property name="maximum"><number>100</number></property><property name="value"><number>0</number></property><property name="format"><string>%p%</string></property></widget></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="remoteSettingsPage">
+         <attribute name="title"><string>Remote defaults</string></attribute>
+         <layout class="QFormLayout" name="remoteFormLayout">
+          <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
+          <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
+          <property name="formAlignment"><set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set></property>
+          <property name="horizontalSpacing"><number>14</number></property>
+          <property name="verticalSpacing"><number>10</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <item row="0" column="0"><widget class="QLabel" name="fpsLabel"><property name="text"><string>Maximum FPS</string></property></widget></item>
+          <item row="0" column="1"><widget class="QSpinBox" name="fpsSpin"/></item>
+          <item row="1" column="0"><widget class="QLabel" name="networkLabel"><property name="text"><string>Default network path</string></property></widget></item>
+          <item row="1" column="1"><widget class="QComboBox" name="networkCombo"/></item>
+          <item row="2" column="0"><widget class="QLabel" name="captureBackendLabel"><property name="text"><string>Capture backend</string></property></widget></item>
+          <item row="2" column="1">
+           <widget class="QWidget" name="captureBackendHost">
+            <layout class="QHBoxLayout" name="captureBackendLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QCheckBox" name="enableWgcCheck"><property name="text"><string>Win10 high performance (WGC)</string></property></widget></item>
+             <item><widget class="QCheckBox" name="enableDxgiCheck"><property name="text"><string>Win8 high performance (DXGI)</string></property></widget></item>
+             <item><widget class="QCheckBox" name="enableDxgiNativeGpuCheck"><property name="text"><string>DXGI native GPU frames</string></property></widget></item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="codecSettingsPage">
+         <attribute name="title"><string>Codecs</string></attribute>
+         <layout class="QVBoxLayout" name="codecLayout">
+          <property name="spacing"><number>12</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>20</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>20</number></property>
+          <item>
+           <widget class="QCheckBox" name="openh264EnableCheck">
+            <property name="text"><string>Enable Cisco OpenH264 software codec</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="openh264AttributionLabel">
+            <property name="text"><string>OpenH264 Video Codec provided by Cisco Systems, Inc.</string></property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="openh264StatusHost">
+            <layout class="QHBoxLayout" name="openh264StatusLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QLabel" name="openh264StatusTitleLabel"><property name="text"><string>Status:</string></property></widget></item>
+             <item><widget class="QLabel" name="openh264StatusLabel"><property name="text"><string>Disabled</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+             <item><spacer name="openh264StatusSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="openh264ImportHintLabel">
+            <property name="text"><string>Import the already decompressed binary downloaded from Cisco.</string></property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="openh264ActionsHost">
+            <layout class="QHBoxLayout" name="openh264ActionsLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><widget class="QPushButton" name="openh264ImportButton"><property name="text"><string>Import binary...</string></property></widget></item>
+             <item><widget class="QPushButton" name="openh264DownloadButton"><property name="text"><string>Cisco official releases</string></property></widget></item>
+             <item><widget class="QPushButton" name="openh264LicenseButton"><property name="text"><string>View license</string></property></widget></item>
+             <item><spacer name="openh264ActionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </widget>
+          </item>
+          <item><spacer name="codecSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="serviceSettingsPage">
+         <attribute name="title"><string>Service</string></attribute>
+         <layout class="QVBoxLayout" name="serviceLayout">
+          <property name="spacing"><number>12</number></property>
+          <property name="leftMargin"><number>16</number></property>
+          <property name="topMargin"><number>16</number></property>
+          <property name="rightMargin"><number>16</number></property>
+          <property name="bottomMargin"><number>16</number></property>
+          <item><widget class="QLabel" name="serviceStatusLabel"/></item>
+          <item><widget class="QPushButton" name="serviceRepairButton"><property name="text"><string>Repair and restart service</string></property></widget></item>
+          <item><widget class="QLabel" name="serviceHintLabel"><property name="text"><string>Required for unattended remote input, lock-screen control, and Ctrl+Alt+Del. Airan Desk installs, updates, and starts this service automatically.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+          <item><spacer name="serviceSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="aboutSettingsPage">
+         <attribute name="title"><string>About</string></attribute>
+         <layout class="QVBoxLayout" name="aboutLayout">
+          <property name="spacing"><number>14</number></property>
+          <property name="leftMargin"><number>24</number></property>
+          <property name="topMargin"><number>28</number></property>
+          <property name="rightMargin"><number>24</number></property>
+          <property name="bottomMargin"><number>24</number></property>
+          <item>
+           <widget class="QLabel" name="aboutProjectNameLabel">
+            <property name="font"><font><pointsize>18</pointsize><weight>75</weight><bold>true</bold></font></property>
+            <property name="text"><string>Airan Desk</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="aboutVersionLabel">
+            <property name="text"><string>Version: %1</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="aboutDescriptionLabel">
+            <property name="text"><string>Fully open-source C++ remote desktop (based on Qt5 + WebRTC + FFmpeg + spdlog + libvterm).</string></property>
+            <property name="alignment"><set>Qt::AlignCenter</set></property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="aboutActionsHost">
+            <layout class="QHBoxLayout" name="aboutActionsLayout">
+             <property name="spacing"><number>10</number></property>
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><spacer name="aboutActionsLeftSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+             <item><widget class="QPushButton" name="aboutLatestReleaseButton"><property name="text"><string>Download latest release</string></property></widget></item>
+             <item><widget class="QPushButton" name="aboutProjectButton"><property name="text"><string>Project on GitHub</string></property></widget></item>
+             <item><widget class="QPushButton" name="aboutStarButton"><property name="text"><string>Star on GitHub</string></property></widget></item>
+             <item><spacer name="aboutActionsRightSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QWidget" name="aboutServerHost">
+            <layout class="QHBoxLayout" name="aboutServerLayout">
+             <property name="leftMargin"><number>0</number></property>
+             <property name="topMargin"><number>0</number></property>
+             <property name="rightMargin"><number>0</number></property>
+             <property name="bottomMargin"><number>0</number></property>
+             <item><spacer name="aboutServerLeftSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+             <item><widget class="QPushButton" name="aboutServerButton"><property name="text"><string>Signal server project on GitHub</string></property></widget></item>
+             <item><spacer name="aboutServerRightSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="aboutNoticeLabel">
+            <property name="text"><string>We strongly recommend privately deploying the signal server. Use this software only on authorized devices and networks, and comply with applicable laws and regulations. The authors are not responsible for unauthorized access, data leakage, or unlawful use.</string></property>
+            <property name="wordWrap"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="aboutReadmeLabel">
+            <property name="text"><string>README</string></property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QTextBrowser" name="aboutReadmeBrowser">
+            <property name="minimumSize"><size><width>0</width><height>180</height></size></property>
+            <property name="readOnly"><bool>true</bool></property>
+            <property name="openExternalLinks"><bool>true</bool></property>
+            <property name="openLinks"><bool>true</bool></property>
+           </widget>
+          </item>
+          <item><spacer name="aboutSpacer"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>20</width><height>40</height></size></property></spacer></item>
+         </layout>
+        </widget>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDialogButtonBox" name="buttonBox">
+        <property name="standardButtons">
+         <set>QDialogButtonBox::Close|QDialogButtonBox::Save</set>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

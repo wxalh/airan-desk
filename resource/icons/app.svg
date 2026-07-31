@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="brightBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E8F4FE"/>
+      <stop offset="100%" stop-color="#B8D8FC"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square app background. -->
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#brightBg)"/>
+
+  <!-- Top connection mark. -->
+  <g transform="translate(0, 0)">
+    <circle cx="226" cy="95" r="12" fill="#0A2540"/>
+    <circle cx="256" cy="95" r="12" fill="#0A2540"/>
+    <circle cx="286" cy="95" r="12" fill="#0A2540"/>
+    <path d="M 212 112 Q 256 140 300 112" fill="none" stroke="#0A2540" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- First brand line. -->
+  <text x="256" y="240" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="200" font-weight="800" fill="#0A2540" text-anchor="middle" dominant-baseline="middle" letter-spacing="2">
+    Ai
+  </text>
+
+  <!-- Second brand line. -->
+  <text x="256" y="400" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="180" font-weight="800" fill="#0A2540" text-anchor="middle" dominant-baseline="middle" letter-spacing="2">
+    Ran
+  </text>
+</svg>

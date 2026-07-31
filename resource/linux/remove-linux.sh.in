@@ -1,0 +1,91 @@
+#!/usr/bin/env sh
+set -eu
+
+app_prefix="${AIRAN_DESK_APPDIR:-${AIRAN_DESK_PREFIX:-/opt/airan-desk}}"
+datadir="${AIRAN_DESK_DATADIR:-/usr/local/share}"
+app_datadir="${AIRAN_DESK_APP_DATADIR:-$app_prefix/share/airan-desk}"
+manifest="$app_prefix/install-manifest.txt"
+legacy_prefix="/usr/local"
+legacy_app_datadir="$legacy_prefix/share/airan-desk"
+legacy_manifest="$legacy_app_datadir/install-manifest.txt"
+udev_rules_dir="${AIRAN_DESK_UDEV_RULES_DIR:-/etc/udev/rules.d}"
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Please run this remover with sudo/root." >&2
+    exit 1
+fi
+
+remove_empty_dir()
+{
+    [ -d "$1" ] || return 0
+    rmdir "$1" 2>/dev/null || true
+}
+
+remove_manifest_paths()
+{
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        case "$path" in
+            "$app_prefix"/*|"$legacy_prefix"/*|"$datadir"/*|"$udev_rules_dir"/*|/home/*/.config/autostart/airan-desk.desktop)
+                rm -f -- "$path"
+                ;;
+            *)
+                echo "Skipping unexpected manifest path: $path" >&2
+                ;;
+        esac
+    done < "$1"
+}
+
+if [ -f "$manifest" ]; then
+    remove_manifest_paths "$manifest"
+elif [ -f "$legacy_manifest" ]; then
+    echo "Using legacy install manifest: $legacy_manifest" >&2
+    remove_manifest_paths "$legacy_manifest"
+else
+    echo "Install manifest not found: $manifest" >&2
+    echo "Falling back to known Airan Desk paths." >&2
+    rm -f -- "$app_prefix/bin/airan-desk" "$app_prefix/bin/airan-desk.real"
+    rm -f -- "$app_prefix/bin/conf/app.qss" "$app_prefix/bin/conf/common.ini"
+    rm -f -- "$legacy_prefix/bin/airan-desk" "$legacy_prefix/bin/airan-desk.real"
+    rm -f -- "$legacy_prefix/bin/conf/app.qss" "$legacy_prefix/bin/conf/common.ini"
+    rm -f -- "$datadir/applications/airan-desk.desktop"
+    rm -f -- "$udev_rules_dir/60-airan-desk-uinput.rules"
+fi
+
+rm -rf -- "$app_datadir/locale" "$app_datadir/translations"
+rm -f -- "$app_datadir/airan-desk-autostart.desktop" \
+    "$app_datadir/install-linux.sh" \
+    "$app_datadir/remove-linux.sh" \
+    "$manifest"
+rm -f -- "$legacy_manifest"
+
+for size in 16 24 32 48 64 128 256; do
+    rm -f -- "$datadir/icons/hicolor/${size}x${size}/apps/airan-desk.png"
+    remove_empty_dir "$datadir/icons/hicolor/${size}x${size}/apps"
+    remove_empty_dir "$datadir/icons/hicolor/${size}x${size}"
+done
+
+remove_empty_dir "$app_prefix/bin/conf"
+remove_empty_dir "$app_prefix/bin"
+rm -rf -- "$app_prefix/plugins" "$app_prefix/lib"
+remove_empty_dir "$app_datadir"
+remove_empty_dir "$app_prefix/share"
+remove_empty_dir "$app_prefix"
+remove_empty_dir "$legacy_prefix/bin/conf"
+remove_empty_dir "$legacy_app_datadir"
+
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    udevadm trigger || true
+fi
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f "$datadir/icons/hicolor" || true
+fi
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$datadir/applications" || true
+fi
+
+echo "Airan Desk has been removed."
+echo "User config/logs under ~/.wxalh/airan-desk were kept."

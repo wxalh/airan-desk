@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icons/app.svg">../icons/app.svg</file>
+        <file alias="conf/app.qss">../conf/app.qss</file>
+        <file alias="licenses/Cisco-OpenH264-BINARY_LICENSE.txt">../../third_party/licenses/Cisco-OpenH264-BINARY_LICENSE.txt</file>
+    </qresource>
+</RCC>

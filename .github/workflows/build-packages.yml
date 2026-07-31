@@ -1,0 +1,589 @@
+name: Build packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      dependency-source:
+        description: "Optional local path on a self-hosted runner containing WebRTC/FFmpeg archives"
+        required: false
+        default: ""
+  push:
+    branches: [ main ]
+  pull_request:
+
+env:
+  BUILD_TYPE: Release
+  DEPENDENCY_SOURCE: ${{ github.event.inputs['dependency-source'] || '' }}
+
+jobs:
+  win10-x64:
+    name: Windows 10 x64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "5.15.2"
+          arch: win64_msvc2019_64
+      - name: Install archive tools
+        shell: pwsh
+        run: choco install zstandard -y --no-progress
+      - name: Prepare third-party packages
+        shell: pwsh
+        run: ./tools/prepare_third_party.ps1 -PackageSet windows -WebrtcPackage windows-win10-x64-m144-md -FfmpegPackage ffmpeg-n8.1-latest-win64-lgpl-shared-8.1.zip
+      - name: Build and package
+        shell: pwsh
+        run: ./tools/build_package.ps1 -ConfigurePreset win10-x64 -BuildPreset win10-x64-release -PackageName airan-desk-win10-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-win10-x64
+          path: out/packages/airan-desk-win10-x64.zip
+
+  win10-arm64:
+    name: Windows 10 arm64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          arch: win64_msvc2022_arm64_cross_compiled
+          modules: qtwebsockets
+      - name: Install archive tools
+        shell: pwsh
+        run: choco install zstandard -y --no-progress
+      - name: Prepare third-party packages
+        shell: pwsh
+        run: ./tools/prepare_third_party.ps1 -PackageSet windows -WebrtcPackage windows-win10-arm64-m144-md -FfmpegPackage ffmpeg-n8.1-latest-winarm64-lgpl-shared-8.1.zip
+      - name: Build and package
+        shell: pwsh
+        run: >
+          ./tools/build_package.ps1
+          -ConfigurePreset win10-arm64
+          -BuildPreset win10-arm64-release
+          -PackageName airan-desk-win10-arm64
+          -CMakeArgs
+          "-DQt6_DIR=$($env:QT_ROOT_DIR)/lib/cmake/Qt6",
+          "-DCMAKE_PREFIX_PATH=$($env:QT_ROOT_DIR)/lib/cmake",
+          "-DAIRAN_DEPLOY_OPENSSL_RUNTIME=OFF"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-win10-arm64
+          path: out/packages/airan-desk-win10-arm64.zip
+
+  win7-x86:
+    name: Windows 7 x86
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: "5.15.2"
+          arch: win32_msvc2019
+      - name: Install archive tools
+        shell: pwsh
+        run: choco install zstandard -y --no-progress
+      - name: Prepare third-party packages
+        shell: pwsh
+        run: ./tools/prepare_third_party.ps1 -PackageSet windows -WebrtcPackage windows-win7-x86-m109-md -FfmpegPackage ffmpeg-n7.1-latest-win32-lgpl-shared-7.1.zip
+      - name: Build and package
+        shell: pwsh
+        run: >
+          ./tools/build_package.ps1
+          -ConfigurePreset win7-x86
+          -BuildPreset win7-x86-release
+          -PackageName airan-desk-win7-x86
+          -CMakeArgs "-DQt5_DIR=$env:Qt5_DIR"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-win7-x86
+          path: out/packages/airan-desk-win7-x86.zip
+
+  linux-x64-glibc2_27-portable:
+    name: Linux x64 glibc 2.27+ portable
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Build in Ubuntu 18.04 x64 container
+        run: |
+          docker run --rm -i \
+            -v "$PWD:/work" -w /work \
+            -e DEPENDENCY_SOURCE="$DEPENDENCY_SOURCE" \
+            ubuntu:18.04 bash -s <<'AIRAN_DOCKER_SCRIPT'
+              set -euo pipefail
+              if ! apt-get -o Acquire::Retries=5 update; then
+                sed -i \
+                  -e 's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' \
+                  -e 's|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' \
+                  /etc/apt/sources.list
+                apt-get -o Acquire::Retries=5 update
+              fi
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+                software-properties-common ca-certificates gnupg curl git python3 python3-pip pkg-config \
+                build-essential meson ninja-build qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+                libfontconfig1-dev libfreetype6-dev \
+                qttools5-dev qttools5-dev-tools libasound2-dev zlib1g-dev \
+                libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
+                libxcomposite-dev libxrandr-dev libxtst-dev libdrm-dev libgbm-dev \
+                libegl1-mesa-dev libgl1-mesa-dev libglib2.0-dev \
+                xz-utils zstd unzip file binutils patchelf
+              python3 -m pip install --upgrade "meson==0.60.3"
+              curl -fsSL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" \
+                | gpg --dearmor -o /usr/share/keyrings/ubuntu-toolchain-r-test.gpg
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-toolchain-r-test.gpg] https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu bionic main" \
+                > /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
+              apt-get -o Acquire::Retries=5 update
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends gcc-11 g++-11
+              curl -L --fail --retry 5 --retry-delay 5 \
+                -o /tmp/cmake-3.31.12-linux-x86_64.tar.gz \
+                https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-linux-x86_64.tar.gz
+              rm -rf /opt/cmake
+              mkdir -p /opt/cmake
+              tar -xzf /tmp/cmake-3.31.12-linux-x86_64.tar.gz -C /opt/cmake --strip-components=1
+              ln -sf /opt/cmake/bin/cmake /usr/local/bin/cmake
+              cmake --version
+              bash ./tools/build_linux_runtime_libva.sh
+              bash ./tools/build_linux_runtime_pipewire.sh
+              bash ./tools/prepare_third_party.sh "" linux linux-ubuntu18-x64-m144-gnu ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz
+              bash ./tools/build_package.sh \
+                --configure-preset linux-x64 \
+                --build-preset linux-x64 \
+                --portable-package-name airan-desk-linux-x64-glibc2.27-portable \
+                --portable-glibc-floor 2.27 \
+                --cmake-arg -DCMAKE_C_COMPILER=gcc-11 \
+                --cmake-arg -DCMAKE_CXX_COMPILER=g++-11 \
+                --cmake-arg "-DCMAKE_PREFIX_PATH=$PWD/third_party/linux-runtime/pipewire-sdk" \
+                --cmake-arg -DAIRAN_REQUIRE_PIPEWIRE_CAPTURE=ON
+          AIRAN_DOCKER_SCRIPT
+      - name: Fix package ownership
+        run: sudo chown -R "$(id -u):$(id -g)" out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-linux-x64-glibc2.27-portable
+          path: out/packages/airan-desk-linux-x64-glibc2.27-portable.tar.gz
+
+  linux-x64-glibc2_17-portable:
+    name: Linux x64 glibc 2.17+ portable
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Build in CentOS 7 x64 container
+        run: |
+          docker run --rm -i \
+            -v "$PWD:/work" -w /work \
+            -e DEPENDENCY_SOURCE="$DEPENDENCY_SOURCE" \
+            quay.io/centos/centos:7 bash -s <<'AIRAN_DOCKER_SCRIPT'
+              set -euo pipefail
+              cat >/etc/yum.repos.d/CentOS-Base.repo <<EOF
+          [base]
+          name=CentOS 7 Base
+          baseurl=https://vault.centos.org/7.9.2009/os/x86_64/
+          enabled=1
+          gpgcheck=0
+          [updates]
+          name=CentOS 7 Updates
+          baseurl=https://vault.centos.org/7.9.2009/updates/x86_64/
+          enabled=1
+          gpgcheck=0
+          [extras]
+          name=CentOS 7 Extras
+          baseurl=https://vault.centos.org/7.9.2009/extras/x86_64/
+          enabled=1
+          gpgcheck=0
+          EOF
+              rm -f /etc/yum.repos.d/CentOS-CR.repo /etc/yum.repos.d/CentOS-Debuginfo.repo \
+                /etc/yum.repos.d/CentOS-Media.repo /etc/yum.repos.d/CentOS-Sources.repo \
+                /etc/yum.repos.d/CentOS-Vault.repo /etc/yum.repos.d/CentOS-fasttrack.repo
+              cat >/etc/yum.repos.d/CentOS-SCLo.repo <<EOF
+          [centos-sclo-rh]
+          name=CentOS 7 SCLo rh
+          baseurl=https://vault.centos.org/7.9.2009/sclo/x86_64/rh/
+          enabled=1
+          gpgcheck=0
+          [centos-sclo-sclo]
+          name=CentOS 7 SCLo sclo
+          baseurl=https://vault.centos.org/7.9.2009/sclo/x86_64/sclo/
+          enabled=1
+          gpgcheck=0
+          EOF
+              cat >/etc/yum.repos.d/epel.repo <<EOF
+          [epel]
+          name=EPEL 7 archive
+          baseurl=https://archives.fedoraproject.org/pub/archive/epel/7/x86_64/
+          enabled=1
+          gpgcheck=0
+          EOF
+              yum clean all
+              yum install -y \
+                ca-certificates curl git python3 python3-pip pkgconfig make ninja-build \
+                devtoolset-11-gcc devtoolset-11-gcc-c++ \
+                qt5-qtbase-devel qt5-qtsvg-devel qt5-qtwebsockets-devel qt5-qttools-devel \
+                fontconfig-devel freetype-devel \
+                alsa-lib-devel zlib-devel libX11-devel libXext-devel libXdamage-devel \
+                libXfixes-devel libXcomposite-devel libXrandr-devel libXtst-devel \
+                libdrm-devel mesa-libgbm-devel mesa-libEGL-devel mesa-libGL-devel glib2-devel \
+                bzip2 xz zstd unzip file binutils patchelf
+              python3 -m pip install --upgrade "pip<22" "meson==0.60.3"
+              curl -L --fail --retry 5 --retry-delay 5 \
+                -o /tmp/cmake-3.31.12-linux-x86_64.tar.gz \
+                https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-linux-x86_64.tar.gz
+              rm -rf /opt/cmake
+              mkdir -p /opt/cmake
+              tar -xzf /tmp/cmake-3.31.12-linux-x86_64.tar.gz -C /opt/cmake --strip-components=1
+              ln -sf /opt/cmake/bin/cmake /usr/local/bin/cmake
+              source /opt/rh/devtoolset-11/enable
+              gcc --version
+              cmake --version
+              for attempt in 1 2 3 4 5; do
+                rm -f /tmp/micromamba.tar.bz2
+                curl -L --fail --retry 5 --retry-delay 5 \
+                  -o /tmp/micromamba.tar.bz2 \
+                  https://micro.mamba.pm/api/micromamba/linux-64/latest
+                if tar -tjf /tmp/micromamba.tar.bz2 >/dev/null; then
+                  break
+                fi
+                if [[ "$attempt" -eq 5 ]]; then
+                  echo "Downloaded micromamba archive failed validation after 5 attempts" >&2
+                  exit 1
+                fi
+              done
+              tar -xjf /tmp/micromamba.tar.bz2 \
+                -C /usr/local/bin --strip-components=1 bin/micromamba
+              for attempt in 1 2 3; do
+                rm -rf /opt/airan-toolchain
+                if MAMBA_ROOT_PREFIX=/opt/micromamba micromamba create -y \
+                    -p /opt/airan-toolchain \
+                    -c conda-forge \
+                    clang=22.1.8 clangxx=22.1.8 \
+                    gcc_linux-64=11.4.0 gxx_linux-64=11.4.0 sysroot_linux-64=2.17; then
+                  break
+                fi
+                if [[ "$attempt" -eq 3 ]]; then
+                  echo "Failed to create the CentOS 7 toolchain after 3 attempts" >&2
+                  exit 1
+                fi
+                sleep $((attempt * 5))
+              done
+              conda_toolchain=/opt/airan-toolchain/bin
+              "$conda_toolchain/clang++" --version
+              rm -rf /tmp/llvm-project /tmp/airan-libcxx-build /opt/airan-libcxx
+              curl -L --fail --retry 5 --retry-delay 5 \
+                -o /tmp/llvm-project.tar.gz \
+                https://github.com/llvm/llvm-project/archive/a6643f27ecdaaff2945a1acd213a745c1526c525.tar.gz
+              mkdir -p /tmp/llvm-project
+              tar -xzf /tmp/llvm-project.tar.gz -C /tmp/llvm-project --strip-components=1
+              rm -rf /tmp/llvm-project/libcxxabi
+              mkdir -p /tmp/llvm-project/libcxxabi
+              curl -L --fail --retry 5 --retry-delay 5 \
+                -o /tmp/libcxxabi.tar.gz \
+                https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi/+archive/83a852080747b9a362e8f9e361366b7a601f302c.tar.gz
+              tar -xzf /tmp/libcxxabi.tar.gz -C /tmp/llvm-project/libcxxabi
+              cmake -S /tmp/llvm-project/runtimes -B /tmp/airan-libcxx-build -G "Unix Makefiles" \
+                -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi" \
+                -DLIBCXX_ENABLE_SHARED=ON \
+                -DLIBCXX_ENABLE_STATIC=OFF \
+                -DLIBCXXABI_ENABLE_SHARED=ON \
+                -DLIBCXXABI_ENABLE_STATIC=OFF \
+                -DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=OFF \
+                -DLLVM_INCLUDE_TESTS=OFF \
+                -DLLVM_INCLUDE_DOCS=OFF \
+                -DLIBCXX_INCLUDE_TESTS=OFF \
+                -DLIBCXX_INCLUDE_DOCS=OFF \
+                -DLIBCXX_INCLUDE_BENCHMARKS=OFF \
+                -DLIBCXXABI_INCLUDE_TESTS=OFF \
+                -DLIBCXX_ABI_VERSION=2 \
+                -DLIBCXX_ABI_NAMESPACE=__Cr \
+                -DLIBCXXABI_ABI_VERSION=2 \
+                -DLIBCXXABI_ABI_NAMESPACE=__Cr \
+                -DLIBCXX_CXX_ABI=libcxxabi \
+                -DLIBCXXABI_USE_LLVM_UNWINDER=OFF \
+                -DLIBCXX_USE_COMPILER_RT=OFF \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/opt/airan-libcxx \
+                -DCMAKE_INSTALL_LIBDIR=lib \
+                -DCMAKE_SYSROOT=/ \
+                -DCMAKE_C_COMPILER="$conda_toolchain/clang" \
+                -DCMAKE_CXX_COMPILER="$conda_toolchain/clang++"
+              cmake --build /tmp/airan-libcxx-build --target install --parallel 4
+              bash ./tools/build_linux_runtime_libva.sh
+              bash ./tools/build_linux_runtime_pipewire.sh
+              bash ./tools/prepare_third_party.sh "" linux linux-centos7-x64-m144-libcxx ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz
+              QMAKE=qmake-qt5 bash ./tools/build_package.sh \
+                --configure-preset linux-x64 \
+                --build-preset linux-x64 \
+                --portable-package-name airan-desk-linux-x64-glibc2.17-portable \
+                --portable-glibc-floor 2.17 \
+                --cmake-arg -DWEBRTC_LINUX_COMPAT=centos7 \
+                --cmake-arg -DWEBRTC_LINUX_STL=libcxx \
+                --cmake-arg -DAIRAN_ENABLE_FFMPEG_RUNTIME=OFF \
+                --cmake-arg "-DCMAKE_C_COMPILER=$conda_toolchain/clang" \
+                --cmake-arg "-DCMAKE_CXX_COMPILER=$conda_toolchain/clang++" \
+                --cmake-arg -DSTATIC_LINK_LIBSTDCPP=OFF \
+                --cmake-arg "-DCMAKE_CXX_FLAGS=-nostdinc++ -isystem /opt/airan-libcxx/include/c++/v1" \
+                --cmake-arg -DCMAKE_SYSROOT=/ \
+                --cmake-arg "-DCMAKE_EXE_LINKER_FLAGS=-L/opt/airan-libcxx/lib -Wl,-rpath,/opt/airan-libcxx/lib -B/usr/lib64 -L/usr/lib64 -Wl,-rpath-link,/usr/lib64" \
+                --cmake-arg "-DCMAKE_PREFIX_PATH=$PWD/third_party/linux-runtime/pipewire-sdk" \
+                --cmake-arg -DAIRAN_REQUIRE_PIPEWIRE_CAPTURE=ON
+          AIRAN_DOCKER_SCRIPT
+      - name: Fix package ownership
+        if: success()
+        run: sudo chown -R "$(id -u):$(id -g)" out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-linux-x64-glibc2.17-portable
+          path: out/packages/airan-desk-linux-x64-glibc2.17-portable.tar.gz
+
+  linux-arm64-glibc2_27-portable:
+    name: Linux arm64 glibc 2.27+ portable
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Build in Ubuntu 18.04 arm64 container
+        run: |
+          docker run --rm -i --platform linux/arm64 \
+            -v "$PWD:/work" -w /work \
+            -e DEPENDENCY_SOURCE="$DEPENDENCY_SOURCE" \
+            ubuntu:18.04 bash -s <<'AIRAN_DOCKER_SCRIPT'
+              set -euo pipefail
+              if ! apt-get -o Acquire::Retries=5 update; then
+                sed -i \
+                  -e 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.aliyun.com/ubuntu-ports|g' \
+                  /etc/apt/sources.list
+                apt-get -o Acquire::Retries=5 update
+              fi
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+                software-properties-common ca-certificates gnupg curl git python3 python3-pip pkg-config \
+                build-essential meson ninja-build qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+                libfontconfig1-dev libfreetype6-dev \
+                qttools5-dev qttools5-dev-tools libasound2-dev zlib1g-dev \
+                libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
+                libxcomposite-dev libxrandr-dev libxtst-dev libdrm-dev libgbm-dev \
+                libegl1-mesa-dev libgl1-mesa-dev libglib2.0-dev \
+                xz-utils zstd unzip file binutils patchelf
+              python3 -m pip install --upgrade "meson==0.60.3"
+              curl -fsSL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" \
+                | gpg --dearmor -o /usr/share/keyrings/ubuntu-toolchain-r-test.gpg
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-toolchain-r-test.gpg] https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu bionic main" \
+                > /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
+              apt-get -o Acquire::Retries=5 update
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends gcc-11 g++-11
+              curl -L --fail --retry 5 --retry-delay 5 \
+                -o /tmp/cmake-3.31.12-linux-aarch64.tar.gz \
+                https://github.com/Kitware/CMake/releases/download/v3.31.12/cmake-3.31.12-linux-aarch64.tar.gz
+              rm -rf /opt/cmake
+              mkdir -p /opt/cmake
+              tar -xzf /tmp/cmake-3.31.12-linux-aarch64.tar.gz -C /opt/cmake --strip-components=1
+              ln -sf /opt/cmake/bin/cmake /usr/local/bin/cmake
+              cmake --version
+              bash ./tools/build_linux_runtime_libva.sh
+              bash ./tools/build_linux_runtime_pipewire.sh
+              bash ./tools/prepare_third_party.sh "" linux linux-ubuntu18-arm64-m144-gnu ffmpeg-n8.1-latest-linuxarm64-lgpl-shared-8.1.tar.xz
+              bash ./tools/build_package.sh \
+                --configure-preset linux-arm64 \
+                --build-preset linux-arm64 \
+                --portable-package-name airan-desk-linux-arm64-glibc2.27-portable \
+                --portable-glibc-floor 2.27 \
+                --cmake-arg -DCMAKE_C_COMPILER=gcc-11 \
+                --cmake-arg -DCMAKE_CXX_COMPILER=g++-11 \
+                --cmake-arg -DCMAKE_FIND_ROOT_PATH= \
+                --cmake-arg "-DCMAKE_PREFIX_PATH=$PWD/third_party/linux-runtime/pipewire-sdk" \
+                --cmake-arg -DAIRAN_REQUIRE_PIPEWIRE_CAPTURE=ON
+          AIRAN_DOCKER_SCRIPT
+      - name: Fix package ownership
+        run: sudo chown -R "$(id -u):$(id -g)" out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-linux-arm64-glibc2.27-portable
+          path: out/packages/airan-desk-linux-arm64-glibc2.27-portable.tar.gz
+
+  linux-armhf-glibc2_27-portable:
+    name: Linux armhf glibc 2.27+ portable
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm
+      - name: Build in Ubuntu 18.04 armhf container
+        run: |
+          docker run --rm -i --platform linux/arm/v7 \
+            -v "$PWD:/work" -w /work \
+            -e DEPENDENCY_SOURCE="$DEPENDENCY_SOURCE" \
+            arm32v7/ubuntu:18.04 bash -s <<'AIRAN_DOCKER_SCRIPT'
+              set -euo pipefail
+              if ! apt-get -o Acquire::Retries=5 update; then
+                sed -i \
+                  -e 's|http://ports.ubuntu.com/ubuntu-ports|http://mirrors.aliyun.com/ubuntu-ports|g' \
+                  /etc/apt/sources.list
+                apt-get -o Acquire::Retries=5 update
+              fi
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+                software-properties-common ca-certificates gnupg curl git python3 python3-pip pkg-config \
+                build-essential meson ninja-build qtbase5-dev libqt5svg5-dev libqt5websockets5-dev \
+                libfontconfig1-dev libfreetype6-dev \
+                qttools5-dev qttools5-dev-tools libasound2-dev zlib1g-dev \
+                libx11-dev libxext-dev libxdamage-dev libxfixes-dev \
+                libxcomposite-dev libxrandr-dev libxtst-dev libdrm-dev libgbm-dev \
+                libegl1-mesa-dev libgl1-mesa-dev libglib2.0-dev \
+                xz-utils zstd unzip file binutils patchelf
+              python3 -m pip install --upgrade "meson==0.60.3"
+              curl -fsSL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1E9377A2BA9EF27F" \
+                | gpg --dearmor -o /usr/share/keyrings/ubuntu-toolchain-r-test.gpg
+              echo "deb [signed-by=/usr/share/keyrings/ubuntu-toolchain-r-test.gpg] https://ppa.launchpadcontent.net/ubuntu-toolchain-r/test/ubuntu bionic main" \
+                > /etc/apt/sources.list.d/ubuntu-toolchain-r-test.list
+              apt-get -o Acquire::Retries=5 update
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends gcc-11 g++-11
+              curl -fsSL --retry 5 --retry-delay 5 --connect-timeout 30 \
+                https://apt.kitware.com/keys/kitware-archive-latest.asc \
+                | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+              echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main" \
+                > /etc/apt/sources.list.d/kitware.list
+              apt-get -o Acquire::Retries=5 update
+              DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends cmake
+              cmake --version
+              bash ./tools/build_linux_runtime_libva.sh
+              bash ./tools/build_linux_runtime_pipewire.sh
+              bash ./tools/prepare_third_party.sh "" linux linux-ubuntu18-armhf-m144-gnu ffmpeg-n8.1-latest-linuxarmhf-lgpl-shared-8.1.tar.xz
+              bash ./tools/build_package.sh \
+                --configure-preset linux-armhf \
+                --build-preset linux-armhf \
+                --portable-package-name airan-desk-linux-armhf-glibc2.27-portable \
+                --portable-glibc-floor 2.27 \
+                --cmake-arg -DCMAKE_C_COMPILER=gcc-11 \
+                --cmake-arg -DCMAKE_CXX_COMPILER=g++-11 \
+                --cmake-arg -DCMAKE_FIND_ROOT_PATH= \
+                --cmake-arg "-DCMAKE_PREFIX_PATH=$PWD/third_party/linux-runtime/pipewire-sdk" \
+                --cmake-arg -DAIRAN_REQUIRE_PIPEWIRE_CAPTURE=ON
+          AIRAN_DOCKER_SCRIPT
+      - name: Fix package ownership
+        run: sudo chown -R "$(id -u):$(id -g)" out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-linux-armhf-glibc2.27-portable
+          path: out/packages/airan-desk-linux-armhf-glibc2.27-portable.tar.gz
+
+  macos-x64:
+    name: macOS x64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: brew install cmake qt@5 zstd
+      - name: Prepare third-party packages
+        run: bash ./tools/prepare_third_party.sh "" macos apple-macos-x64-m144
+      - name: Build and package
+        run: bash ./tools/build_package.sh --configure-preset macos-x64 --build-preset macos-x64 --package-name airan-desk-macos-x64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-macos-x64
+          path: out/packages/airan-desk-macos-x64.tar.gz
+
+  macos-arm64:
+    name: macOS arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - name: Install dependencies
+        run: brew install cmake qt@5 zstd
+      - name: Prepare third-party packages
+        run: bash ./tools/prepare_third_party.sh "" macos apple-macos-arm64-m144
+      - name: Build and package
+        run: bash ./tools/build_package.sh --configure-preset macos-arm64 --build-preset macos-arm64 --package-name airan-desk-macos-arm64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: airan-desk-macos-arm64
+          path: out/packages/airan-desk-macos-arm64.tar.gz
+
+  release:
+    name: Publish release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    needs:
+      - win10-x64
+      - win10-arm64
+      - win7-x86
+      - linux-x64-glibc2_27-portable
+      - linux-x64-glibc2_17-portable
+      - linux-arm64-glibc2_27-portable
+      - linux-armhf-glibc2_27-portable
+      - macos-x64
+      - macos-arm64
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Extract version from CMakeLists.txt
+        id: version
+        run: |
+          VERSION=$(grep -m1 'project(airan-desk VERSION' CMakeLists.txt \
+            | sed 's/.*VERSION[[:space:]]\+\([0-9][0-9.]*\).*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        run: |
+          git log -1 --format=%B "$GITHUB_SHA" > release-notes.txt
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Prepare versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG" --force
+
+      - name: Publish versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mapfile -t RELEASE_FILES < <(python3 - <<'PY'
+          from pathlib import Path
+          files = sorted(
+              (path for path in Path("artifacts").rglob("*") if path.is_file()),
+              key=lambda path: (path.name, str(path)),
+          )
+          for path in files:
+              print(path)
+          PY
+          )
+
+          gh release create "$TAG" "${RELEASE_FILES[@]}" \
+            --title "airan-desk $TAG" \
+            --notes-file release-notes.txt \
+            --latest

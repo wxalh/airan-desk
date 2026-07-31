@@ -1,0 +1,34 @@
+#include <windows.h>
+
+1 ICON "app.ico"
+1 24 "uac.manifest"
+
+1 VERSIONINFO
+FILEVERSION 1,1,1,0
+PRODUCTVERSION 1,1,1,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "wxalh.com"
+            VALUE "FileDescription", "airan-desk"
+            VALUE "FileVersion", "1.1.1"
+            VALUE "InternalName", "airan-desk"
+            VALUE "OriginalFilename", "airan-desk.exe"
+            VALUE "ProductName", "airan-desk"
+            VALUE "ProductVersion", "1.1.1"
+            VALUE "LegalCopyright", "Airan-Desk source: Mozilla Public License 2.0"
+            VALUE "Comments", "Third-party notices: licenses/Third-Party-Notices.md"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0804, 1200
+    END
+END
