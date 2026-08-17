@@ -1,14 +1,37 @@
 #include "terminal/file_panel/terminal_file_panel.h"
 
+#include "common/logger_manager.h"
 #include "common/constant.h"
 #include "util/json/json_util.h"
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDir>
 #include <QJsonObject>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QToolButton>
+
+namespace
+{
+QString normalizedRemotePath(const QString &path)
+{
+    const QString raw = path.trimmed();
+    const bool windowsStyle = raw.size() >= 2 && raw.at(1) == QLatin1Char(':') &&
+                              raw.at(0).isLetter();
+    const bool uncStyle = raw.startsWith(QStringLiteral("//")) ||
+                          raw.startsWith(QStringLiteral("\\\\"));
+    QString normalizedInput = QDir::fromNativeSeparators(raw);
+    if (windowsStyle || uncStyle)
+        normalizedInput.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    QString normalized = QDir::cleanPath(normalizedInput);
+    // The controller may run on a different OS than the remote endpoint.
+    // Treat Windows drive and UNC paths case-insensitively regardless of the local build.
+    if (windowsStyle || uncStyle)
+        normalized = normalized.toLower();
+    return normalized;
+}
+}
 
 
 QString TerminalFilePanel::currentRemotePath() const
@@ -31,14 +54,29 @@ void TerminalFilePanel::setConnected(bool connected)
 }
 
 
+void TerminalFilePanel::setPendingFileListRequestId(const QString &requestId)
+{
+    m_pendingFileListRequestId = requestId;
+}
+
+
 void TerminalFilePanel::setRemotePath(const QString &path)
 {
-    if (path.isEmpty() || path == m_currentRemotePath)
+    if (path.isEmpty())
         return;
 
-    m_currentRemotePath = path;
-    updatePathEdit();
-    if (m_connected)
+    const QString normalizedPath = normalizedRemotePath(path);
+    const bool samePath = !m_currentRemotePath.isEmpty() &&
+                          normalizedPath == normalizedRemotePath(m_currentRemotePath);
+    if (!samePath)
+    {
+        m_currentRemotePath = path;
+        updatePathEdit();
+    }
+
+    const bool pathLoaded = !m_loadedRemotePath.isEmpty() &&
+                            normalizedPath == normalizedRemotePath(m_loadedRemotePath);
+    if (m_connected && (!samePath || (m_pendingFileListRequestId.isEmpty() && !pathLoaded)))
         emit requestFileList(path);
 }
 
@@ -53,12 +91,51 @@ void TerminalFilePanel::followTerminalPath(const QString &path)
 
 void TerminalFilePanel::recvGetFileList(const QJsonObject &object)
 {
+    const QString responseRequestId = JsonUtil::getString(object, Constant::KEY_REQUEST_ID);
+    const QString responsePath = JsonUtil::getString(object, Constant::KEY_PATH);
+    const bool responsePathMatches = responsePath.isEmpty() || m_currentRemotePath.isEmpty() ||
+                                     normalizedRemotePath(responsePath) == normalizedRemotePath(m_currentRemotePath);
+    if (!responsePathMatches)
+    {
+        LOG_DEBUG("Ignoring stale file-list response: responsePath={}, currentPath={}",
+                  responsePath,
+                  m_currentRemotePath);
+        return;
+    }
+
+    if (!m_pendingFileListRequestId.isEmpty())
+    {
+        const bool requestIdMatches = !responseRequestId.isEmpty() &&
+                                      responseRequestId == m_pendingFileListRequestId;
+        const bool legacyResponseMatches = responseRequestId.isEmpty() &&
+                                           !responsePath.isEmpty() &&
+                                           responsePathMatches;
+        if (!requestIdMatches && !legacyResponseMatches)
+        {
+            LOG_DEBUG("Ignoring stale file-list generation: responseRequestId={}, currentRequestId={}",
+                      responseRequestId,
+                      m_pendingFileListRequestId);
+            return;
+        }
+        m_pendingFileListRequestId.clear();
+    }
+    if (object.contains(Constant::KEY_STATUS) &&
+        !JsonUtil::getBool(object, Constant::KEY_STATUS, true))
+    {
+        setConnected(true);
+        QMessageBox::warning(this,
+                             tr("File list failed"),
+                             tr("Failed to list remote directory:\n%1")
+                                 .arg(JsonUtil::getString(object, Constant::KEY_ERROR, tr("Unknown"))));
+        return;
+    }
     if (object.contains(Constant::KEY_PATH))
     {
-        const QString path = JsonUtil::getString(object, Constant::KEY_PATH);
+        const QString path = responsePath;
         if (!path.isEmpty())
             m_currentRemotePath = path;
     }
+    m_loadedRemotePath = m_currentRemotePath;
     if (object.contains(Constant::KEY_FOLDER_FILES))
     {
         m_remoteFiles = object.value(Constant::KEY_FOLDER_FILES).toArray();

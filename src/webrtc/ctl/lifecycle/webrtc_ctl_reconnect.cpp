@@ -16,13 +16,16 @@ void WebRtcCtl::disableReconnect()
 
 void WebRtcCtl::scheduleReconnect()
 {
+    if (!m_allowReconnect || m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     if (QThread::currentThread() != thread())
     {
         QMetaObject::invokeMethod(this, "scheduleReconnect", Qt::QueuedConnection);
         return;
     }
 
-    if (!m_allowReconnect)
+    if (!m_allowReconnect || m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
 
     
@@ -78,6 +81,9 @@ void WebRtcCtl::stopReconnect()
 
 void WebRtcCtl::setNetworkPath(const QString &networkPath)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     if (QThread::currentThread() != thread())
     {
         QMetaObject::invokeMethod(this, "setNetworkPath", Qt::QueuedConnection,
@@ -110,9 +116,17 @@ void WebRtcCtl::setNetworkPath(const QString &networkPath)
     if (m_reconnectTimer)
         m_reconnectTimer->stop();
 
+    // Drain the controlled-side peer before rebuilding with the new path;
+    // otherwise the next CONNECT can overlap the old active WebRtcCli.
+    sendDisconnectSignal(QStringLiteral("network_path_change"));
     destroy();
     m_pendingNetworkPathReconnect = m_networkPath;
-    QTimer::singleShot(1200, this, &WebRtcCtl::restartAfterNetworkPathChange);
+    const quint64 reconnectGeneration = ++m_networkPathReconnectGeneration;
+    QTimer::singleShot(1200, this, [this, reconnectGeneration]() {
+        if (reconnectGeneration != m_networkPathReconnectGeneration)
+            return;
+        restartAfterNetworkPathChange();
+    });
 }
 
 void WebRtcCtl::restartAfterNetworkPathChange()

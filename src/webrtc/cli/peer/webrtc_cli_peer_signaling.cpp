@@ -151,6 +151,9 @@ void WebRtcCli::onPeerLocalCandidate(const rtc::Candidate &candidate)
 
 void WebRtcCli::sendSignalingError(const QString &message)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     const QString reason = message.trimmed().isEmpty() ? tr("Remote initialization failed: unknown reason") : message.trimmed();
     QJsonObject errorMsg = JsonUtil::createObject()
                                .add(Constant::KEY_ROLE, Constant::ROLE_CLI)

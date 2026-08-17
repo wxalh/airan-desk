@@ -206,7 +206,6 @@ required_notices=(
   WebRTC-PATENTS.txt \
   WebRTC-Third-Party-Licenses.txt \
   WebRTC-args.gn \
-  WebRTC-package.sha256 \
   WebRTC-source-revision.txt \
   spdlog-LICENSE.txt \
   fmt-LICENSE.rst \

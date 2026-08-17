@@ -37,6 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    m_asyncCallbacksAlive->store(false);
     AuditLogger::instance().setFailureHandler(AuditLogger::FailureHandler());
     cleanupTray();
 #if defined(Q_OS_WIN64) || defined(Q_OS_WIN32)

@@ -3,6 +3,17 @@ set(AIRAN_OPENSSL_RUNTIME_DLLS "" CACHE INTERNAL "OpenSSL runtime DLLs to deploy
 if(WIN32)
     option(AIRAN_DEPLOY_OPENSSL_RUNTIME "Copy OpenSSL runtime DLLs next to the executable when detected" ON)
 
+    if(CMAKE_VS_PLATFORM_NAME MATCHES "ARM64" OR
+       CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64|AARCH64)$")
+        # The Windows ARM64 build must not copy an x64 OpenSSL installation
+        # discovered by CMake. Qt can use its Schannel backend; deployment is
+        # disabled until an explicitly architecture-matched OpenSSL package is
+        # wired into the target.
+        set(AIRAN_DEPLOY_OPENSSL_RUNTIME OFF CACHE BOOL
+            "Copy OpenSSL runtime DLLs next to the executable when detected" FORCE)
+        message(STATUS "[OpenSSL] Runtime deployment disabled for Windows ARM64")
+    endif()
+
     if(AIRAN_DEPLOY_OPENSSL_RUNTIME)
         set(OPENSSL_USE_STATIC_LIBS OFF CACHE BOOL "Prefer dynamic OpenSSL runtime for Qt TLS support")
 
@@ -21,6 +32,11 @@ if(WIN32)
         find_package(OpenSSL QUIET)
 
         if(OpenSSL_FOUND)
+            if(NOT OPENSSL_ROOT_DIR AND OPENSSL_INCLUDE_DIR)
+                get_filename_component(_openssl_root "${OPENSSL_INCLUDE_DIR}" DIRECTORY)
+                set(OPENSSL_ROOT_DIR "${_openssl_root}" CACHE PATH
+                    "OpenSSL installation root" FORCE)
+            endif()
             set(_openssl_runtime_dirs)
             if(OPENSSL_ROOT_DIR)
                 list(APPEND _openssl_runtime_dirs "${OPENSSL_ROOT_DIR}/bin")

@@ -631,10 +631,6 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</translatio
         <translation>Failed to create target directory: %1</translation>
     </message>
     <message>
-        <source>Failed to remove existing target file: %1</source>
-        <translation>Failed to remove existing target file: %1</translation>
-    </message>
-    <message>
         <source>Failed to create target file: %1 (%2)</source>
         <translation>Failed to create target file: %1 (%2)</translation>
     </message>
@@ -902,6 +898,16 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</translatio
     <message>
         <source>The remote device closed this connection.</source>
         <translation>The remote device closed this connection.</translation>
+    </message>
+    <message>
+        <source>File list failed</source>
+        <translation>File list failed</translation>
+    </message>
+    <message>
+        <source>Failed to list remote directory:
+%1</source>
+        <translation>Failed to list remote directory:
+%1</translation>
     </message>
 </context>
 <context>
@@ -2110,6 +2116,16 @@ Verification code: %3</translation>
         <source>Transfer failed: %1</source>
         <translation>Transfer failed: %1</translation>
     </message>
+    <message>
+        <source>File list failed</source>
+        <translation>File list failed</translation>
+    </message>
+    <message>
+        <source>Failed to list remote directory:
+%1</source>
+        <translation>Failed to list remote directory:
+%1</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWindow</name>
@@ -2176,6 +2192,14 @@ Verification code: %3</translation>
     <message>
         <source>The remote device closed this connection.</source>
         <translation>The remote device closed this connection.</translation>
+    </message>
+    <message>
+        <source>[Terminal startup timed out; retrying in compatibility mode...]</source>
+        <translation>[Terminal startup timed out; retrying in compatibility mode...]</translation>
+    </message>
+    <message>
+        <source>[Terminal failed to start after compatibility fallback]</source>
+        <translation>[Terminal failed to start after compatibility fallback]</translation>
     </message>
 </context>
 <context>
@@ -2374,6 +2398,14 @@ Verification code: %3</translation>
     <message>
         <source>Failed to queue clipboard stream read request.</source>
         <translation>Failed to queue clipboard stream read request.</translation>
+    </message>
+    <message>
+        <source>Remote directory is unavailable or not readable.</source>
+        <translation>Remote directory is unavailable or not readable.</translation>
+    </message>
+    <message>
+        <source>Directory contains too many entries to display safely.</source>
+        <translation>Directory contains too many entries to display safely.</translation>
     </message>
 </context>
 <context>
@@ -2653,6 +2685,58 @@ Verification code: %3</translation>
     <message>
         <source>Failed to queue clipboard stream read request.</source>
         <translation>Failed to queue clipboard stream read request.</translation>
+    </message>
+    <message>
+        <source>File control message is too large, reconnecting...</source>
+        <translation>File control message is too large, reconnecting...</translation>
+    </message>
+    <message>
+        <source>File control queue is full, reconnecting...</source>
+        <translation>File control queue is full, reconnecting...</translation>
+    </message>
+    <message>
+        <source>Clipboard channel closed, reconnecting...</source>
+        <translation>Clipboard channel closed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>Clipboard channel error, reconnecting...</source>
+        <translation>Clipboard channel error, reconnecting...</translation>
+    </message>
+    <message>
+        <source>Clipboard control queue is full, reconnecting...</source>
+        <translation>Clipboard control queue is full, reconnecting...</translation>
+    </message>
+    <message>
+        <source>File channel closed, reconnecting...</source>
+        <translation>File channel closed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>File channel failed, reconnecting...</source>
+        <translation>File channel failed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>File control channel closed, reconnecting...</source>
+        <translation>File control channel closed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>File control channel failed, reconnecting...</source>
+        <translation>File control channel failed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>Too many pending upload requests.</source>
+        <translation>Too many pending upload requests.</translation>
+    </message>
+    <message>
+        <source>Input control queue is full, reconnecting...</source>
+        <translation>Input control queue is full, reconnecting...</translation>
+    </message>
+    <message>
+        <source>Session heartbeat channel closed, reconnecting...</source>
+        <translation>Session heartbeat channel closed, reconnecting...</translation>
+    </message>
+    <message>
+        <source>ICE candidate queue is full, reconnecting...</source>
+        <translation>ICE candidate queue is full, reconnecting...</translation>
     </message>
 </context>
 <context>

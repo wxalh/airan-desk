@@ -60,6 +60,7 @@ public:
 
     
     void init();
+    void requestShutdown();
 
 private:
     void initPeerConnection();
@@ -78,14 +79,25 @@ private:
 
     bool uploadSingleFile(const QString &ctlPath, const QString &cliPath, const QString &transferId,
                           qint64 baseBytes = 0, qint64 totalBytes = -1, int currentFileIndex = 1, int totalFiles = 1);
+    void uploadSingleFileAsync(const QString &ctlPath, const QString &cliPath, const QString &transferId,
+                               qint64 baseBytes = 0, qint64 totalBytes = -1, int currentFileIndex = 1, int totalFiles = 1,
+                               const std::function<void(bool)> &completion = {});
     void uploadDirectory(const QString &ctlPath, const QString &cliPath, const QString &transferId);
+    void continueUploadDirectory(const QString &ctlPath, const QString &cliPath, const QString &transferId,
+                                 qint64 totalBytes, int totalFiles);
+    void continueUploadDirectoryWithMetadata(const QString &ctlPath, const QString &cliPath, const QString &transferId,
+                                             qint64 totalBytes, int totalFiles, QVector<QJsonObject> metadataHeaders);
     void processUploadQueue();
+    void processNextUpload();
     bool sendFileMetadataPacket(const QJsonObject &header, const QString &transferId = QString());
+    void sendFileMetadataPacketAsync(const QJsonObject &header, const QString &transferId,
+                                     const std::function<void(bool)> &completion);
     bool isTransferCancelled(const QString &transferId) const;
     void markTransferCancelled(const QString &transferId);
     void sendTransferCancel(const QString &transferId);
     void emitTransferProgress(const QString &transferId, qint64 transferredBytes, qint64 totalBytes, int transferredFiles, int totalFiles);
-    qint64 collectDirectoryStats(const QString &path, int *fileCount) const;
+    qint64 collectDirectoryStats(const QString &path, int *fileCount,
+                                 const QString &transferId = QString()) const;
     void handleSignalingError(const QJsonObject &object);
     void handleRemoteDescriptionMessage(const QJsonObject &object, const QString &type);
     void handleRemoteCandidateMessage(const QJsonObject &object);
@@ -93,13 +105,17 @@ private:
     void flushPendingRemoteCandidates();
 
     void processVideoFrame(const rtc::binary &videoData, const rtc::FrameInfo &frameInfo);
+    void enqueueVideoFrameBytes(QByteArray data, qint64 timestampUs);
+    void drainVideoFrameIngress();
 #if defined(_WIN32) && defined(AIRAN_WEBRTC_WINDOWS_PLATFORM_WIN10)
     void processD3D11VideoFrame(rtc::D3D11VideoFrame frame);
+    void enqueueD3D11VideoFrame(const rtc::D3D11VideoFrame &frame);
 #endif
     void processAudioFrame(const rtc::binary &audioData, const rtc::FrameInfo &frameInfo);
     rtc::Configuration buildRtcConfiguration() const;
     void applyLocalStreamConfig(const QJsonObject &object);
     void noteLocalNetworkCandidate(const QString &candidate);
+    void querySelectedNetworkPath();
     void publishNetworkPathState(const QString &selectedPath = QString());
     void restartAfterNetworkPathChange();
     void startAudioPlayback();
@@ -134,12 +150,20 @@ private:
     void onFileTextChannelClosed();
     void onFileTextChannelError(const std::string &error);
     void onFileTextChannelMessage(const rtc::message_variant &message);
+    bool consumeImmediateTransferCancel(const QByteArray &data);
+    void flushPendingFileTextMessages();
+    void queueInputControlMessage(const rtc::message_variant &data);
+    void flushPendingInputControlMessages();
+    bool sendInputControlMessage(const rtc::message_variant &data);
     void processFileTextChannelMessage(const QByteArray &data);
     void drainFileTextIngress();
     void handleFileTextChannelObject(const QJsonObject &object);
     void flushTerminalOutput();
+    void flushTerminalOutputBeforeSessionEnd();
+    void beginTerminalStartGeneration(const QString &requestId);
     void updateTerminalFlowControl();
     void sendTerminalFlowControl(bool enabled);
+    bool isCurrentTerminalResponse(const QString &requestId) const;
     bool handleTerminalTextChannelObject(const QJsonObject &object, const QString &msgType);
     bool handleFileTransferTextChannelObject(const QJsonObject &object, const QString &msgType);
     void onInputChannelOpen();
@@ -158,12 +182,15 @@ private:
     void handleClipboardTextBegin(const QJsonObject &object);
     void handleClipboardTextChunk(const QJsonObject &object);
     void handleClipboardTextEnd(const QJsonObject &object);
+    void removeClipboardInboundTextLocked(const QString &requestId);
+    void expireClipboardTextRequests();
     void handleClipboardPayloadBegin(const QJsonObject &object);
     void handleClipboardPayloadChunk(const QJsonObject &object);
     void handleClipboardPayloadEnd(const QJsonObject &object);
     void removeClipboardInboundPayloadLocked(const QString &requestId);
     void expireClipboardPayloadRequests();
     void clearClipboardPayloadTransferState();
+    void wakeClipboardWaitersForShutdown();
     void handleClipboardSnapshot(const QJsonObject &object);
     void handleClipboardApplyResult(const QJsonObject &object);
     void noteClipboardUploadResult(const QString &path, bool status);
@@ -197,6 +224,9 @@ private:
     void sendClipboardPayloadToRemote(const QJsonObject &payload, bool pasteAfterApply);
     void sendRemotePasteShortcut();
     Q_INVOKABLE bool sendClipboardChannelObject(const QJsonObject &object);
+    bool trySendClipboardChannelObject(const QJsonObject &object);
+    void queueClipboardControlMessage(const QJsonObject &object);
+    void flushPendingClipboardControlMessages();
     void pollSessionHeartbeat();
     void sendSessionHeartbeat(const QString &action);
     void noteSessionInboundActivity();
@@ -234,6 +264,10 @@ private:
     std::shared_ptr<rtc::DataChannel> m_inputMoveChannel;
     std::shared_ptr<rtc::DataChannel> m_clipboardChannel;
     std::shared_ptr<rtc::DataChannel> m_heartbeatChannel;
+    QQueue<rtc::message_variant> m_pendingFileTextMessages;
+    qint64 m_pendingFileTextMessageBytes = 0;
+    QQueue<rtc::message_variant> m_pendingInputControlMessages;
+    qint64 m_pendingInputControlMessageBytes = 0;
     std::shared_ptr<rtc::Track> m_videoTrack;
     std::shared_ptr<rtc::Track> m_localAudioTrack;
     std::shared_ptr<rtc::Track> m_remoteAudioTrack;
@@ -243,6 +277,10 @@ private:
     bool m_remoteDisconnectReceived = false;
     bool needSendAnswer = false;
     bool m_remoteDescriptionSet = false;
+    bool m_remoteDescriptionInFlight = false;
+    QString m_pendingRemoteDescriptionData;
+    QString m_pendingRemoteDescriptionType;
+    QJsonObject m_pendingRemoteDescriptionObject;
     QVector<QPair<QString, QString>> m_pendingRemoteCandidates;
 
     std::unique_ptr<FilePacketUtil> m_filePacketUtil;
@@ -253,6 +291,15 @@ private:
     std::deque<rtc::binary> m_fileIngress;
     qint64 m_fileIngressBytes = 0;
     bool m_fileIngressScheduled = false;
+    std::atomic_bool m_fileIngressOverflowed{false};
+    QMutex m_videoFrameIngressMutex;
+    QByteArray m_pendingVideoFrameBytes;
+    qint64 m_pendingVideoFrameTimestampUs{0};
+    int m_pendingVideoFrameKind{0};
+    bool m_videoFrameIngressScheduled{false};
+#if defined(_WIN32) && defined(AIRAN_WEBRTC_WINDOWS_PLATFORM_WIN10)
+    rtc::D3D11VideoFrame m_pendingD3D11VideoFrame;
+#endif
 
     std::string m_host;
     uint16_t m_port = 0;
@@ -265,7 +312,12 @@ private:
     int m_requestedHeight{0};
     QStringList m_availableNetworkPaths{QStringLiteral("auto")};
     QString m_selectedNetworkPath;
+    bool m_hasPublishedNetworkPathState{false};
+    QStringList m_lastPublishedNetworkPaths;
+    QString m_lastPublishedSelectedNetworkPath;
+    QString m_lastPublishedRequestedNetworkPath;
     QString m_pendingNetworkPathReconnect;
+    quint64 m_networkPathReconnectGeneration{0};
     QString m_audioMode{QStringLiteral("off")};
     QSize m_remoteCodedSize;
     QSize m_remoteVisibleSize;
@@ -278,12 +330,16 @@ private:
     QString m_remoteEncoderType;
     QString m_remoteMediaCodec;
     QString m_remoteMediaCaptureLabel;
+    QString m_terminalStartRequestId;
+    QString m_latestFileListRequestId;
 
     QTimer *m_reconnectTimer = nullptr;
+    QTimer *m_peerStartupTimer = nullptr;
     int m_reconnectAttempts = 0;
     int m_reconnectBackoffMs = 5000;
     bool m_allowReconnect = true;
     std::atomic_bool m_shutdownStarted{false};
+    std::atomic_bool m_shutdownRequested{false};
     std::atomic_bool m_reconnectPending{false};
     bool m_shutdownDone = false;
 
@@ -301,17 +357,20 @@ private:
     std::atomic<qint64> m_lastSessionProgressMs{0};
     quint64 m_lastBufferedAmount = 0;
     quint64 m_heartbeatSequence = 0;
+    qint64 m_lastSessionHeartbeatSentMs = 0;
     std::atomic_bool m_heartbeatNegotiated{false};
     int m_sessionHealthState = 0;
     QMutex m_fileTextIngressMutex;
     QQueue<QByteArray> m_fileTextIngress;
     std::atomic<qint64> m_fileTextIngressBytes{0};
     bool m_fileTextIngressScheduled = false;
+    std::atomic_bool m_fileTextIngressOverflowed{false};
     QTimer *m_terminalOutputFlushTimer = nullptr;
     QByteArray m_pendingTerminalOutput;
     qint64 m_terminalOutputInFlight = 0;
     qint64 m_terminalConsumerBacklog = 0;
     bool m_terminalFlowPaused = false;
+    bool m_terminalOutputNeedsReset = false;
 
     qint64 m_videoStatsStartMs = 0;
     qint64 m_videoStatsBytes = 0;
@@ -350,6 +409,9 @@ private:
     QMap<QString, int> m_clipboardInboundTextNextIndexes;
     QMap<QString, qint64> m_clipboardInboundTextExpectedBytes;
     QMap<QString, bool> m_clipboardInboundTextPasteAfterApply;
+    QMap<QString, qint64> m_clipboardInboundTextDeadlinesMs;
+    qint64 m_clipboardInboundTextReservedBytes = 0;
+    QTimer *m_clipboardTextExpiryTimer = nullptr;
     QMap<QString, QByteArray> m_clipboardInboundPayloadChunks;
     QMap<QString, int> m_clipboardInboundPayloadChunkCounts;
     QMap<QString, int> m_clipboardInboundPayloadNextIndexes;
@@ -357,6 +419,7 @@ private:
     QMap<QString, bool> m_clipboardInboundPayloadPasteAfterApply;
     QMap<QString, qint64> m_clipboardInboundPayloadDeadlinesMs;
     qint64 m_clipboardInboundPayloadReservedBytes = 0;
+    QTimer *m_clipboardPayloadExpiryTimer = nullptr;
     QMap<QString, QByteArray> m_clipboardStreamChunks;
     QMap<QString, QString> m_clipboardStreamErrors;
     QMap<QString, qint64> m_pendingClipboardStreamRequests;
@@ -377,11 +440,14 @@ private:
     QQueue<ClipboardChunkSendState> m_clipboardChunkSendQueue;
     qint64 m_clipboardChunkSendQueuedBytes = 0;
     bool m_clipboardChunkSendScheduled = false;
+    QQueue<QJsonObject> m_pendingClipboardControlMessages;
+    qint64 m_pendingClipboardControlMessageBytes = 0;
     bool m_remoteDesktopLocked = false;
 
 private slots:
     void doReconnect();
     void sendControlHeartbeat();
+    void onPeerStartupTimeout();
     void onVideoFrameBytesReceived(const QByteArray &data, qint64 timestampUs);
 #if defined(_WIN32) && defined(AIRAN_WEBRTC_WINDOWS_PLATFORM_WIN10)
     void onD3D11VideoFrameQueued(const rtc::D3D11VideoFrame &frame);
@@ -413,9 +479,10 @@ signals:
     void fileTextChannelOpened();
     void localClipboardPayloadReceived(const QJsonObject &payload);
     void terminalOutput(const QByteArray &data);
-    void terminalClosed(int exitCode);
-    void terminalError(const QString &message);
-    void terminalInfo(const QString &osName, const QString &shellPath, const QString &mode, bool pathTracking, bool pathTrackingReady);
+    void terminalClosed(int exitCode, const QString &requestId);
+    void terminalError(const QString &message, const QString &requestId);
+    void terminalInfo(const QString &osName, const QString &shellPath, const QString &mode,
+                      bool pathTracking, bool pathTrackingReady, const QString &requestId);
 
     void videoFrameDecoded(const QImage &frame);
     void videoFrameD3D11Decoded(const rtc::D3D11VideoFrame &frame);

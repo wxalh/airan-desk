@@ -15,6 +15,7 @@ class QSplitter;
 class QCheckBox;
 class QLabel;
 class QCloseEvent;
+class QTimer;
 class TerminalLogWriter;
 
 namespace Ui
@@ -39,6 +40,7 @@ private:
     void initUI();
     void initCLI();
     void tryStartTerminal();
+    void sendTerminalStart(bool requestFallback);
     void updateTerminalTitle(const QString &title);
     void sendTerminalResize(const QSize &gridSize);
     void sendTerminalInput(const QByteArray &data);
@@ -57,9 +59,11 @@ private slots:
     void onTerminalSessionHealthChanged(int state, const QString &message);
     void onFilePanelSessionHealthChanged(int state, const QString &message);
     void onRemoteDisconnectRequested(const QString &reason, bool peerWide);
-    void onTerminalInfo(const QString &osName, const QString &shellPath, const QString &mode, bool pathTracking, bool pathTrackingReady);
-    void onTerminalClosed(int exitCode);
-    void onTerminalError(const QString &message);
+    void onTerminalInfo(const QString &osName, const QString &shellPath, const QString &mode,
+                        bool pathTracking, bool pathTrackingReady, const QString &requestId);
+    void onTerminalClosed(int exitCode, const QString &requestId);
+    void onTerminalError(const QString &message, const QString &requestId);
+    void onTerminalStartTimeout();
     void onAutoSaveLogToggled(bool checked);
     void onTerminalLogError(const QString &message);
     void onTerminalLogOpenFinished(bool ok, const QString &errorMessage);
@@ -80,6 +84,12 @@ private:
     QString m_terminalLogPath;
     bool m_channelReady = false;
     bool m_started = false;
+    bool m_terminalFallbackRequested = false;
+    bool m_terminalLegacyResponseMode = false;
+    quint64 m_terminalStartGeneration = 0;
+    QString m_terminalStartRequestId;
+    QString m_pendingFileListRequestId;
+    QTimer *m_terminalStartTimer = nullptr;
     bool m_terminalLogEnabled = false;
     QString m_remoteOs;
     QString m_remoteShell;

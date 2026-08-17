@@ -27,6 +27,9 @@ createSetRemoteDescriptionObserver(std::function<void()> success,
 scoped_refptr<webrtc::RTCStatsCollectorCallback>
 createMediaStatsCollector(std::function<void(MediaStats)> cb);
 
+scoped_refptr<webrtc::RTCStatsCollectorCallback>
+createSelectedCandidatePairCollector(std::function<void(bool, SelectedCandidatePair)> cb);
+
 } // namespace rtc
 
 #endif /* AIRAN_RTC_PEER_CONNECTION_ASYNC_HELPERS_H */

@@ -131,6 +131,7 @@ private:
     QPushButton *m_serviceRepairButton{nullptr};
     QLabel *m_serviceStatusLabel{nullptr};
     std::atomic_bool m_micTestRunning{false};
+    std::atomic_bool m_speakerTestRunning{false};
     std::atomic_bool m_audioRefreshRunning{false};
     std::shared_ptr<std::atomic_bool> m_asyncCallbacksAlive{std::make_shared<std::atomic_bool>(true)};
     std::thread m_micTestThread;

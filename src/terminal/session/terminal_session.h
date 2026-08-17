@@ -6,7 +6,9 @@
 #include <QProcess>
 #include <QSocketNotifier>
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -27,7 +29,7 @@ public:
     ~TerminalSession();
 
 public slots:
-    void start(int cols = 80, int rows = 24);
+    void start(int cols = 80, int rows = 24, const QString &requestedMode = QString());
     void writeInput(const QByteArray &data);
     void resize(int cols, int rows);
     void setOutputPaused(bool paused);
@@ -52,7 +54,11 @@ private:
     bool startWindowsFallbackProcess();
     QByteArray normalizeWindowsInput(const QByteArray &data) const;
     QByteArray normalizeFallbackInput(const QByteArray &data) const;
-    DWORD writeWindowsConPtyInput(const QByteArray &data);
+    bool enqueueWindowsInput(const QByteArray &data);
+    void startWindowsInputWriter(quint64 generation);
+    void stopWindowsInputWriter();
+    void cancelWriterIo();
+    void writerLoop(quint64 generation);
     QByteArray decodeWindowsOutput(const char *data, int size);
     QByteArray decodeWindowsConsoleBytes(const QByteArray &data);
     QByteArray encodeWindowsConsoleBytes(const QString &text) const;
@@ -67,6 +73,9 @@ private slots:
     void onFallbackReadyRead();
     void onFallbackFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onFallbackError(QProcess::ProcessError error);
+#if defined(Q_OS_WIN)
+    void finalizeWindowsProcessExit(quint64 generation, int exitCode);
+#endif
 #if !defined(Q_OS_WIN)
     void onPtyReadyRead();
     void flushPtyInput();
@@ -83,7 +92,7 @@ private:
 #if defined(Q_OS_WIN)
     void closeConPty();
     void cancelReaderIo();
-    void readerLoop();
+    void readerLoop(quint64 generation);
 
     HPCON m_hpc = nullptr;
     HANDLE m_inputWrite = nullptr;
@@ -91,6 +100,12 @@ private:
     HANDLE m_processHandle = nullptr;
     std::thread m_readerThread;
     std::atomic_bool m_readerRunning{false};
+    std::thread m_writerThread;
+    std::atomic_bool m_writerRunning{false};
+    std::mutex m_writerMutex;
+    std::condition_variable m_writerCondition;
+    QByteArray m_writerPendingInput;
+    quint64 m_windowsSessionGeneration = 0;
     QByteArray m_windowsUtf8DecodePending;
     QByteArray m_windowsConsoleDecodePending;
     QByteArray m_windowsPendingInput;
@@ -106,5 +121,3 @@ private:
 };
 
 #endif /* TERMINAL_SESSION_H */
-
-

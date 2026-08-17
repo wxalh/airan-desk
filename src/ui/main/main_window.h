@@ -12,6 +12,9 @@
 #include <QElapsedTimer>
 #include <QIcon>
 
+#include <atomic>
+#include <memory>
+
 #include "websocket/ws_cli.h"
 #include "webrtc/cli/webrtc_cli.h"
 
@@ -27,6 +30,7 @@ class QWidget;
 class AppTitleBar;
 class QCloseEvent;
 class SettingsWindow;
+struct ControlledAccessDecision;
 struct MainWindowLayoutMetrics;
 
 namespace Ui
@@ -108,8 +112,12 @@ private:
     void applySignalingConfiguration(bool reconnect);
     void handleDeviceIdConflict(const QJsonObject &object);
     bool handleIncomingConnectRequest(const QString &sender, const QJsonObject &object);
+    void completeIncomingConnectRequest(const QString &sender,
+                                        const QJsonObject &object,
+                                        ControlledAccessDecision decision);
     QString localizedErrorMessage(const QString &message) const;
     void cleanupWebRtcCliSessions();
+    void destroyWebRtcCli(WebRtcCli *webrtcCli);
     void initTray();
     void cleanupTray();
     void bindUiObjects();
@@ -180,6 +188,17 @@ private:
     WsCli *m_ws{nullptr};
     QThread *m_ws_thread{nullptr};
     QHash<WebRtcCli *, QThread *> m_rtcCliSessions;
+    QSet<WebRtcCli *> m_rtcCliShutdownPending;
+    std::shared_ptr<std::atomic_bool> m_asyncCallbacksAlive{
+        std::make_shared<std::atomic_bool>(true)};
+    std::shared_ptr<std::atomic_int> m_pendingAccessEvaluations{
+        std::make_shared<std::atomic_int>(0)};
+    std::shared_ptr<std::atomic_ullong> m_accessPolicyGeneration{
+        std::make_shared<std::atomic_ullong>(1)};
+    std::shared_ptr<std::atomic_ullong> m_accessQueueOverflowCount{
+        std::make_shared<std::atomic_ullong>(0)};
+    std::shared_ptr<std::atomic_bool> m_accessQueueOverflowAuditScheduled{
+        std::make_shared<std::atomic_bool>(false)};
     QSet<QScreen *> m_boundDesktopScreens;
     QTimer *m_desktopScreenChangeTimer{nullptr};
     bool isCaptureing;

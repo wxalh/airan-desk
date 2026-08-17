@@ -116,7 +116,10 @@ void PeerConnection::OnIceCandidate(const NativeIceCandidate *candidate)
 
 void PeerConnection::OnDataChannel(scoped_refptr<webrtc::DataChannelInterface> data_channel)
 {
+    if (!data_channel)
+        return;
     auto channel = std::make_shared<DataChannel>(data_channel);
+    pruneClosedDataChannels();
     m_channels.push_back(channel);
     std::function<void(std::shared_ptr<DataChannel>)> callback;
     {

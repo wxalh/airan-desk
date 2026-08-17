@@ -17,6 +17,7 @@
 
 namespace
 {
+constexpr int kPeerStartupTimeoutMs = 15000;
 
 QString normalizeInitialAudioMode(const QString &mode)
 {
@@ -73,18 +74,14 @@ WebRtcCli::WebRtcCli(const QString &remoteId, int fps, bool isOnlyFile, int requ
         m_adaptiveVideoFpsCap = 30;
 
     QGuiApplication *guiApp = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
-    QScreen *screen = guiApp ? guiApp->primaryScreen() : nullptr;
+    QScreen *screen = !m_isOnlyFile && guiApp ? guiApp->primaryScreen() : nullptr;
     m_screenIndex = 0;
-    m_currentDesktopSourceIndex = desktopSourceIndexForScreenIndex(m_screenIndex);
-    m_screenId = currentScreenId();
-    m_currentDesktopSourceRect = desktopSourceRectForScreenIndex(m_screenIndex);
-    const QSize screenSize = m_currentDesktopSourceRect.isValid()
-                                 ? m_currentDesktopSourceRect.size()
-                                 : physicalScreenSize(screen);
+    m_currentDesktopSourceIndex = 0;
+    m_screenId = QStringLiteral("screen-0");
+    const QSize screenSize = physicalScreenSize(screen);
+    m_currentDesktopSourceRect = QRect(QPoint(0, 0), screenSize);
     m_screen_width = screenSize.width();
     m_screen_height = screenSize.height();
-    LOG_INFO("Initial desktop capture screen selected: primary index={}, size={}x{}",
-             m_screenIndex, m_screen_width, m_screen_height);
     m_requestedEncodeWidth = requestedWidth;
     m_requestedEncodeHeight = requestedHeight;
     m_baseRequestedEncodeWidth = requestedWidth;
@@ -142,6 +139,10 @@ WebRtcCli::WebRtcCli(const QString &remoteId, int fps, bool isOnlyFile, int requ
     m_inputChannelRecoverTimer = new QTimer(this);
     m_inputChannelRecoverTimer->setSingleShot(true);
     connect(m_inputChannelRecoverTimer, &QTimer::timeout, this, &WebRtcCli::recoverInputChannel);
+
+    m_peerStartupTimer = new QTimer(this);
+    m_peerStartupTimer->setSingleShot(true);
+    connect(m_peerStartupTimer, &QTimer::timeout, this, &WebRtcCli::onPeerStartupTimeout);
 
     m_streamConfigApplyTimer = new QTimer(this);
     m_streamConfigApplyTimer->setSingleShot(true);
@@ -221,8 +222,13 @@ WebRtcCli::~WebRtcCli()
 
 void WebRtcCli::init()
 {
+    if (m_shutdownRequested.load())
+        return;
     LOG_INFO("Creating PeerConnection and tracks for client side");
+    if (!m_isOnlyFile)
+        initializeScreenSelection();
     m_heartbeatNegotiated.store(false);
+    m_peerConnected.store(false);
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     m_lastSessionInboundMs.store(now);
     m_lastSessionOutboundMs.store(now);
@@ -268,4 +274,19 @@ void WebRtcCli::init()
         return;
     }
     m_peerConnection->createOffer();
+    if (m_peerStartupTimer && !m_connected)
+        m_peerStartupTimer->start(kPeerStartupTimeoutMs);
+}
+
+
+void WebRtcCli::onPeerStartupTimeout()
+{
+    if (m_shutdownStarted.load() || m_destroying || m_connected)
+        return;
+
+    m_disconnectReason = QStringLiteral("connection_start_timeout");
+    LOG_WARN("PeerConnection startup timed out before reaching connected; destroying controlled session");
+    sendSignalingError(tr("Remote PeerConnection startup timed out"));
+    sendSessionDisconnect(m_disconnectReason);
+    emit destroyCli();
 }

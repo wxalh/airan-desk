@@ -3,8 +3,69 @@
 #include "util/json/json_util.h"
 #include "util/text/convert_util.h"
 
-#include <QCoreApplication>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <chrono>
 
+namespace
+{
+struct AsyncFragmentSendState
+{
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool completed{false};
+    bool success{false};
+};
+
+bool sendFragmentAndWait(const std::shared_ptr<rtc::DataChannel> &channel,
+                         const rtc::binary &fragment,
+                         const QString &logPath,
+                         const FilePacketUtil::CancelCallback &cancelCallback)
+{
+    if (!channel || !channel->isOpen())
+        return false;
+
+    constexpr auto kSendTimeout = std::chrono::seconds(45);
+    const auto state = std::make_shared<AsyncFragmentSendState>();
+    channel->sendAsync(rtc::message_variant(fragment), [state](bool success) {
+        {
+            std::lock_guard<std::mutex> lock(state->mutex);
+            state->success = success;
+            state->completed = true;
+        }
+        state->condition.notify_one();
+    });
+
+    const auto deadline = std::chrono::steady_clock::now() + kSendTimeout;
+    std::unique_lock<std::mutex> lock(state->mutex);
+    while (!state->completed)
+    {
+        if (state->condition.wait_for(lock, std::chrono::milliseconds(10), [&state]() { return state->completed; }))
+            break;
+
+        lock.unlock();
+        if (!channel->isOpen())
+        {
+            LOG_ERROR("Data channel closed while waiting for asynchronous packet fragment send: {}", logPath);
+            return false;
+        }
+        const bool cancelled = cancelCallback && cancelCallback();
+        lock.lock();
+        if (cancelled)
+        {
+            LOG_INFO("Packet fragment send cancelled: {}", logPath);
+            return false;
+        }
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+            LOG_ERROR("Timed out waiting for asynchronous packet fragment send: {}", logPath);
+            return false;
+        }
+    }
+    return state->completed && state->success;
+}
+}
 
 bool FilePacketUtil::sendPacketStream(QFile *file,
                                       const QByteArray &payload,
@@ -12,7 +73,8 @@ bool FilePacketUtil::sendPacketStream(QFile *file,
                                       std::shared_ptr<rtc::DataChannel> channel,
                                       const QString &logPath,
                                       const ProgressCallback &progressCallback,
-                                      const CancelCallback &cancelCallback)
+                                      const CancelCallback &cancelCallback,
+                                      QCryptographicHash *fileHash)
 {
     if (!channel || !channel->isOpen())
     {
@@ -66,8 +128,6 @@ bool FilePacketUtil::sendPacketStream(QFile *file,
 
     quint64 fragmentIndex = 0;
     quint64 totalSent = 0;
-    qint64 lastEventPumpMs = QDateTime::currentMSecsSinceEpoch();
-
     while (fragmentIndex < totalFragments)
     {
         if (cancelCallback && cancelCallback())
@@ -78,7 +138,8 @@ bool FilePacketUtil::sendPacketStream(QFile *file,
             return false;
         }
 
-        const QByteArray fragmentPayload = FilePacketStreamHelpers::takeFragmentPayload(dataBuffer, file);
+        const QByteArray fragmentPayload =
+            FilePacketStreamHelpers::takeFragmentPayload(dataBuffer, file, fileHash);
         if (fragmentPayload.isEmpty())
             break;
 
@@ -95,9 +156,9 @@ bool FilePacketUtil::sendPacketStream(QFile *file,
                     file->close();
                 return false;
             }
-            if (!channel->send(fragment))
+            if (!sendFragmentAndWait(channel, fragment, logPath, cancelCallback))
             {
-                LOG_ERROR("SCTP rejected file fragment: index={}, buffered={} bytes",
+                LOG_ERROR("Asynchronous data channel rejected file fragment: index={}, buffered={} bytes",
                           fragmentIndex, channel->bufferedAmount());
                 if (file)
                     file->close();
@@ -106,13 +167,6 @@ bool FilePacketUtil::sendPacketStream(QFile *file,
             totalSent += fragmentPayload.size();
             if (progressCallback && (fragmentIndex % 16 == 0 || fragmentIndex == totalFragments - 1))
                 progressCallback(static_cast<qint64>(totalSent), static_cast<qint64>(totalDataSize));
-
-            const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-            if (QCoreApplication::instance() && nowMs - lastEventPumpMs >= 25)
-            {
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
-                lastEventPumpMs = nowMs;
-            }
 
             if (fragmentIndex % 1024 == 0 || fragmentIndex == totalFragments - 1)
             {

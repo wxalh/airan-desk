@@ -19,6 +19,8 @@ void WebRtcCtl::sendControlHeartbeat()
         return;
     }
 
+    flushPendingInputControlMessages();
+
     QJsonObject obj = JsonUtil::createObject()
                           .add(Constant::KEY_MSGTYPE, Constant::TYPE_CONTROL_HEARTBEAT)
                           .add(Constant::KEY_SENDER, ConfigUtil->local_id)
@@ -27,8 +29,9 @@ void WebRtcCtl::sendControlHeartbeat()
                           .build();
     try
     {
-        m_inputChannel->send(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
-        noteSessionOutboundActivity();
+        const bool sent = sendInputControlMessage(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
+        if (!sent)
+            LOG_WARN("Control heartbeat was queued because the input channel rejected it");
     }
     catch (const std::exception &e)
     {

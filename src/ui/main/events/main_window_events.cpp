@@ -341,6 +341,7 @@ void MainWindow::openSettingsFromTray()
     connect(m_settingsWindow, &QObject::destroyed, this, [this]()
             { m_settingsWindow = nullptr; });
     connect(m_settingsWindow, &SettingsWindow::controlledAccessChanged, this, [this](bool allowed) {
+        m_accessPolicyGeneration->fetch_add(1);
         if (!allowed)
             disconnectAllControlledSessions();
     });

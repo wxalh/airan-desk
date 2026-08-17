@@ -125,6 +125,8 @@ private:
     bool m_lastPipeOutputWasCr = false;
     bool m_filterPromptEcho = false;
     QByteArray m_terminalFilterPending;
+    QElapsedTimer m_promptEchoFilterTimer;
+    QByteArray m_osc7Pending;
     std::deque<QVector<VTermScreenCell>> m_scrollback;
     quint64 m_scrollbackSequence = 0;
     QQueue<PendingOutput> m_pendingOutput;

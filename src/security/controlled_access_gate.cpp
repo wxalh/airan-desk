@@ -6,12 +6,11 @@
 #include "util/config/config_util.h"
 #include "util/json/json_util.h"
 
-#include <QUuid>
-
 #include <atomic>
 
 namespace
 {
+constexpr int kMaxSessionIdChars = 128;
 std::atomic_bool g_runtimePrerequisiteReady{true};
 bool constantTimeEqual(const QByteArray &left, const QByteArray &right)
 {
@@ -50,14 +49,36 @@ bool ControlledAccessGate::runtimePrerequisiteReady()
 ControlledAccessDecision ControlledAccessGate::evaluate(const QString &sender, const QJsonObject &object,
                                                         bool notificationReady)
 {
+    return evaluate(sender, object, policySnapshot(), notificationReady);
+}
+
+ControlledAccessPolicySnapshot ControlledAccessGate::policySnapshot()
+{
+    ControlledAccessPolicySnapshot policy;
+    policy.allowRemote = ConfigUtil->allow_remote;
+    policy.expectedPasswordDigest = ConfigUtil->local_pwd_md5.trimmed().toUtf8();
+    return policy;
+}
+
+ControlledAccessDecision ControlledAccessGate::evaluate(
+    const QString &sender,
+    const QJsonObject &object,
+    const ControlledAccessPolicySnapshot &policy,
+    bool notificationReady)
+{
     ControlledAccessDecision decision;
     decision.peerId = sender.trimmed();
     decision.sourceIp = JsonUtil::getString(object, QStringLiteral("source_ip")).trimmed();
     decision.sessionId = JsonUtil::getString(object, Constant::KEY_SESSION_ID).trimmed();
-    if (decision.sessionId.isEmpty())
-        decision.sessionId = QUuid::createUuid().toString().remove(QLatin1Char('{')).remove(QLatin1Char('}'));
+    if (decision.sessionId.isEmpty() || decision.sessionId.size() > kMaxSessionIdChars)
+    {
+        decision.reason = QStringLiteral("invalid_session_id");
+        if (AuditLogger::instance().isReady())
+            appendConnectionRequest(decision, false, decision.reason);
+        return decision;
+    }
 
-    if (!ConfigUtil->allow_remote)
+    if (!policy.allowRemote)
     {
         decision.reason = QStringLiteral("controlled_access_disabled");
         if (AuditLogger::instance().isReady())
@@ -89,7 +110,7 @@ ControlledAccessDecision ControlledAccessGate::evaluate(const QString &sender, c
     }
 
     const QString receiverPassword = JsonUtil::getString(object, Constant::KEY_RECEIVER_PWD).trimmed();
-    const QByteArray expected = ConfigUtil->local_pwd_md5.trimmed().toUtf8();
+    const QByteArray expected = policy.expectedPasswordDigest;
     const QByteArray supplied = receiverPassword.toUtf8();
     if (expected.isEmpty() || supplied.isEmpty() || !constantTimeEqual(expected, supplied))
     {

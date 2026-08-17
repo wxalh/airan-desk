@@ -10,6 +10,8 @@ namespace WebRtcCliSessionShutdown
 {
 bool shutdown(WebRtcCli *webrtcCli, QThread *rtcCliThread)
 {
+    if (webrtcCli)
+        webrtcCli->requestShutdown();
     const QString tag = rtcCliThread && !rtcCliThread->objectName().isEmpty()
                             ? rtcCliThread->objectName()
                             : QStringLiteral("WebRtcCli");

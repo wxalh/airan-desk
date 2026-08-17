@@ -20,8 +20,8 @@ git submodule update --init --recursive
 ## WebRTC 静态包
 
 必须选择与构建目标完全匹配的自包含包。准备脚本会从最新不可变 Release 下载
-`libwebrtc-manifest.json`，解析唯一资产，并在刷新 `third_party/webrtc` 前校验清单中的
-文件大小和 SHA-256：
+`libwebrtc-manifest.json`，解析唯一资产，并在刷新共享的 `third_party/webrtc` 目录前
+校验清单中的文件大小和 SHA-256：
 
 ```powershell
 ./tools/prepare_third_party.ps1 -PackageSet windows -WebrtcPackage windows-win10-x64-m144-md
@@ -62,9 +62,10 @@ WebRTC m144 的上游来源固定到 Chromium branch-head 7559：
 `WebRTC-Third-Party-Licenses.txt`；构建脚本来源为
 <https://github.com/wxalh/libwebrtc_build>。
 
-每个所选 slice 都提供实际 `args.gn`、包级 `.airan-package-sha256` 和精确
-`source_revision.txt`。构建会把这些目标相关元数据复制到发布目录；它们与静态库共同
-记录 monolithic WebRTC slice 的 H.264/FFmpeg/OpenH264 能力。
+每个所选 slice 都提供实际 `args.gn`、精确 `source_revision.txt` 和
+`PACKAGE-METADATA.json`。准备脚本只在下载归档时依据 `libwebrtc-manifest.json` 校验
+文件大小和 SHA-256；解压目录中的缓存标记不属于 WebRTC 包接口，也不是 CMake 配置或
+正式打包的前提。构建会把所选 slice 的构建参数和源码修订复制到发布目录。
 
 ## FFmpeg shared/dev 包
 

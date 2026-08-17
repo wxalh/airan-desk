@@ -9,17 +9,50 @@
 #include <rtc_base/ssl_adapter.h>
 
 #include <stdexcept>
+#include <thread>
 
 namespace rtc
 {
+
+namespace
+{
+std::atomic<int> g_deferredThreadStops{0};
+
+void stopThreadSafely(std::unique_ptr<Thread> &thread, bool &started)
+{
+    if (!thread)
+        return;
+    if (!started)
+    {
+        thread.reset();
+        return;
+    }
+    started = false;
+    if (!thread->IsCurrent())
+    {
+        thread->Stop();
+        return;
+    }
+
+    Thread *const currentThread = thread.release();
+    g_deferredThreadStops.fetch_add(1, std::memory_order_acq_rel);
+    currentThread->Quit();
+    std::thread([currentThread]() {
+        currentThread->Stop();
+        delete currentThread;
+        g_deferredThreadStops.fetch_sub(1, std::memory_order_acq_rel);
+    }).detach();
+}
+} // namespace
 
 
 PeerConnection::PeerConnection(const Configuration &config)
     : m_mediaTopology(config.mediaTopology),
       m_acceptRemoteVideoSimulcast(config.mediaTopology == MediaTopology::Sfu)
 {
+    try
+    {
     ensureInitialized();
-    g_instanceCount.fetch_add(1, std::memory_order_relaxed);
     LOG_INFO("Creating Google WebRTC PeerConnection: iceServers={}, policy={}, iceTcp={}, mediaTopology={}, acceptRemoteSimulcast={}, audioDeviceModule={}",
              config.iceServers.size(),
              static_cast<int>(config.iceTransportPolicy),
@@ -36,9 +69,15 @@ PeerConnection::PeerConnection(const Configuration &config)
     m_networkThread->SetName("airan-webrtc-network", nullptr);
     m_workerThread->SetName("airan-webrtc-worker", nullptr);
     m_signalingThread->SetName("airan-webrtc-signaling", nullptr);
-    m_networkThread->Start();
-    m_workerThread->Start();
-    m_signalingThread->Start();
+    if (!m_networkThread->Start())
+        throw std::runtime_error("failed to start WebRTC threads");
+    m_networkThreadStarted = true;
+    if (!m_workerThread->Start())
+        throw std::runtime_error("failed to start WebRTC threads");
+    m_workerThreadStarted = true;
+    if (!m_signalingThread->Start())
+        throw std::runtime_error("failed to start WebRTC threads");
+    m_signalingThreadStarted = true;
 
     m_workerThread->BlockingCall([&]() {
         m_audioDeviceModule = createAudioDeviceModule(config.enableAudioDeviceModule);
@@ -65,14 +104,28 @@ PeerConnection::PeerConnection(const Configuration &config)
     m_pc = pcOrError.MoveValue();
     if (!m_pc)
         throw std::runtime_error("failed to create Google WebRTC peer connection");
+    g_instanceCount.fetch_add(1, std::memory_order_relaxed);
+    m_instanceCounted = true;
     LOG_INFO("Google WebRTC PeerConnection created");
+    }
+    catch (...)
+    {
+        cleanupConstructionFailure();
+        throw;
+    }
 }
 
 
 PeerConnection::~PeerConnection()
 {
     close();
-    m_factory = nullptr;
+    auto releaseFactory = [this]() {
+        m_factory = nullptr;
+    };
+    if (m_signalingThread && !m_signalingThread->IsQuitting() && !m_signalingThread->IsCurrent())
+        m_signalingThread->BlockingCall(releaseFactory);
+    else
+        releaseFactory();
     if (m_audioDeviceModule && m_workerThread && !m_workerThread->IsQuitting())
     {
         m_workerThread->BlockingCall([this]() {
@@ -83,18 +136,51 @@ PeerConnection::~PeerConnection()
     {
         m_audioDeviceModule = nullptr;
     }
-    if (m_signalingThread)
-        m_signalingThread->Stop();
-    if (m_workerThread)
-        m_workerThread->Stop();
-    if (m_networkThread)
-        m_networkThread->Stop();
-    g_instanceCount.fetch_sub(1, std::memory_order_relaxed);
+    stopThreadSafely(m_signalingThread, m_signalingThreadStarted);
+    stopThreadSafely(m_workerThread, m_workerThreadStarted);
+    stopThreadSafely(m_networkThread, m_networkThreadStarted);
+    if (m_instanceCounted)
+    {
+        const int remaining = g_instanceCount.fetch_sub(1, std::memory_order_relaxed) - 1;
+        LOG_INFO("Google WebRTC PeerConnection destroyed: remaining={}", remaining);
+    }
+}
+
+
+void PeerConnection::cleanupConstructionFailure()
+{
+    auto releaseWebRtc = [this]() {
+        m_pc = nullptr;
+        m_factory = nullptr;
+    };
+    if (m_signalingThread && m_signalingThreadStarted &&
+        !m_signalingThread->IsQuitting() && !m_signalingThread->IsCurrent())
+        m_signalingThread->BlockingCall(releaseWebRtc);
+    else
+        releaseWebRtc();
+
+    if (m_audioDeviceModule && m_workerThread && m_workerThreadStarted &&
+        !m_workerThread->IsQuitting() && !m_workerThread->IsCurrent())
+    {
+        m_workerThread->BlockingCall([this]() {
+            m_audioDeviceModule = nullptr;
+        });
+    }
+    else
+    {
+        m_audioDeviceModule = nullptr;
+    }
+
+    stopThreadSafely(m_signalingThread, m_signalingThreadStarted);
+    stopThreadSafely(m_workerThread, m_workerThreadStarted);
+    stopThreadSafely(m_networkThread, m_networkThreadStarted);
 }
 
 
 void Cleanup()
 {
+    while (g_deferredThreadStops.load(std::memory_order_acquire) > 0)
+        std::this_thread::yield();
     if (g_instanceCount.load(std::memory_order_relaxed) <= 0)
         CleanupSSL();
 }

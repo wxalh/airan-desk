@@ -84,7 +84,6 @@ try {
         "licenses/WebRTC-PATENTS.txt",
         "licenses/WebRTC-Third-Party-Licenses.txt",
         "licenses/WebRTC-args.gn",
-        "licenses/WebRTC-package.sha256",
         "licenses/WebRTC-source-revision.txt",
         "licenses/spdlog-LICENSE.txt",
         "licenses/fmt-LICENSE.rst",

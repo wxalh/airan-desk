@@ -10,6 +10,9 @@
 namespace
 {
 constexpr size_t kMaxFileTextMessageBytes = 16 * 1024 * 1024;
+constexpr qint64 kMaxFileTextIngressBytes = 64LL * 1024 * 1024;
+constexpr int kMaxFileTextIngressMessages = 8192;
+constexpr int kFileTextIngressBatchSize = 256;
 constexpr qint64 kMaxFileIngressBytes = 32 * 1024 * 1024;
 constexpr size_t kMaxFileIngressFragments = 8192;
 constexpr size_t kFileIngressBatchSize = 512;
@@ -66,6 +69,9 @@ void WebRtcCli::onFileChannelOpen()
         return;
     }
     LOG_INFO("File channel opened");
+    m_fileIngressOverflowed.store(false);
+    if (m_filePacketUtil)
+        m_filePacketUtil->clearPendingReassemblies();
 }
 
 
@@ -92,24 +98,36 @@ void WebRtcCli::onFileChannelMessage(rtc::message_variant data)
     }
 
     bool scheduleDrain = false;
+    bool overflowed = false;
     {
         QMutexLocker locker(&m_fileIngressMutex);
-        while (!m_shutdownStarted.load() &&
-               (m_fileIngressBytes + static_cast<qint64>(binaryData.size()) > kMaxFileIngressBytes ||
-                m_fileIngress.size() >= kMaxFileIngressFragments))
-        {
-            m_fileIngressDrained.wait(&m_fileIngressMutex, 50);
-        }
         if (m_shutdownStarted.load())
             return;
 
-        m_fileIngressBytes += static_cast<qint64>(binaryData.size());
-        m_fileIngress.emplace_back(std::move(binaryData));
-        if (!m_fileIngressScheduled)
+        overflowed = m_fileIngressBytes + static_cast<qint64>(binaryData.size()) > kMaxFileIngressBytes ||
+                     m_fileIngress.size() >= kMaxFileIngressFragments;
+        if (!overflowed)
         {
-            m_fileIngressScheduled = true;
-            scheduleDrain = true;
+            m_fileIngressBytes += static_cast<qint64>(binaryData.size());
+            m_fileIngress.emplace_back(std::move(binaryData));
+            if (!m_fileIngressScheduled)
+            {
+                m_fileIngressScheduled = true;
+                scheduleDrain = true;
+            }
         }
+    }
+
+    if (overflowed)
+    {
+        if (m_fileIngressOverflowed.exchange(true))
+            return;
+        LOG_ERROR("File ingress queue is full; closing file channel to abort the transfer without blocking WebRTC callbacks");
+        if (m_fileChannel)
+            m_fileChannel->close();
+        if (m_filePacketUtil)
+            m_filePacketUtil->clearPendingReassemblies();
+        return;
     }
 
     if (scheduleDrain)
@@ -186,6 +204,8 @@ void WebRtcCli::onFileChannelError(std::string error)
         return;
     }
     LOG_ERROR("File channel error: {}", error);
+    m_disconnectReason = QStringLiteral("file_channel_error");
+    emit destroyCli();
 }
 
 
@@ -203,8 +223,17 @@ void WebRtcCli::onFileChannelClosed()
         return;
     }
     LOG_INFO("File channel closed");
-    if (m_isOnlyFile)
-        emit destroyCli();
+    {
+        QMutexLocker locker(&m_fileIngressMutex);
+        m_fileIngress.clear();
+        m_fileIngressBytes = 0;
+        m_fileIngressScheduled = false;
+        m_fileIngressDrained.wakeAll();
+    }
+    if (m_filePacketUtil)
+        m_filePacketUtil->clearPendingReassemblies();
+    m_disconnectReason = QStringLiteral("file_channel_closed");
+    emit destroyCli();
 }
 
 
@@ -222,6 +251,11 @@ void WebRtcCli::onFileTextChannelOpen()
         return;
     }
     LOG_INFO("File text channel opened");
+    m_fileTextIngressOverflowed.store(false);
+    flushPendingFileTextMessages();
+    if (m_terminalBackpressureTimer &&
+        (!m_pendingTerminalOutputChunks.isEmpty() || m_terminalChannelPaused))
+        m_terminalBackpressureTimer->start();
     populateLocalFiles();
 }
 
@@ -241,53 +275,130 @@ void WebRtcCli::onFileTextChannelMessage(rtc::message_variant data)
         LOG_WARN("Rejected oversized file text channel message: size={} bytes", std::get<std::string>(data).size());
         return;
     }
+    const std::string &message = std::get<std::string>(data);
+    const QByteArray messageBytes(message.data(), static_cast<int>(message.size()));
+    if (consumeImmediateTransferCancel(messageBytes))
+        return;
     if (QThread::currentThread() != thread())
     {
-        const std::string &message = std::get<std::string>(data);
-        const QByteArray messageBytes = QByteArray::fromRawData(message.data(), static_cast<int>(message.size()));
-        QJsonParseError parseError{};
-        const QJsonDocument document = QJsonDocument::fromJson(messageBytes, &parseError);
-        if (parseError.error == QJsonParseError::NoError)
+        bool scheduleDrain = false;
+        bool overflowed = false;
         {
-            const QJsonObject object = document.object();
-            if (JsonUtil::getString(object, Constant::KEY_MSGTYPE) == Constant::TYPE_FILE_TRANSFER_CANCEL)
-                markTransferCancelled(JsonUtil::getString(object, Constant::KEY_TRANSFER_ID));
+            QMutexLocker locker(&m_fileTextIngressMutex);
+            overflowed = m_fileTextIngress.size() >= kMaxFileTextIngressMessages ||
+                         messageBytes.size() > kMaxFileTextIngressBytes - m_fileTextIngressBytes;
+            if (!overflowed)
+            {
+                m_fileTextIngress.enqueue(messageBytes);
+                m_fileTextIngressBytes += messageBytes.size();
+                if (!m_fileTextIngressScheduled)
+                {
+                    m_fileTextIngressScheduled = true;
+                    scheduleDrain = true;
+                }
+            }
         }
 
-        const QPointer<WebRtcCli> guard(this);
-        m_callbackDispatcher->post([guard, data = std::move(data)]() mutable {
-            if (guard)
-                guard->onFileTextChannelMessage(std::move(data));
-        });
+        if (overflowed)
+        {
+            if (m_fileTextIngressOverflowed.exchange(true))
+                return;
+            LOG_ERROR("CLI file-text ingress queue is full; closing the channel instead of dropping protocol messages");
+            if (m_fileTextChannel)
+                m_fileTextChannel->close();
+            return;
+        }
+        if (scheduleDrain)
+        {
+            const QPointer<WebRtcCli> guard(this);
+            m_callbackDispatcher->post([guard]() {
+                if (guard)
+                    guard->drainFileTextIngress();
+            });
+        }
         return;
     }
-    if (std::holds_alternative<std::string>(data))
+
+    processFileTextChannelMessage(messageBytes);
+}
+
+
+bool WebRtcCli::consumeImmediateTransferCancel(const QByteArray &data)
+{
+    const QByteArray cancelType = Constant::TYPE_FILE_TRANSFER_CANCEL.toUtf8();
+    if (!data.contains(cancelType))
+        return false;
+
+    const QJsonObject object = JsonUtil::safeParseObject(data);
+    if (JsonUtil::getString(object, Constant::KEY_MSGTYPE) !=
+        Constant::TYPE_FILE_TRANSFER_CANCEL)
     {
-        const std::string &message = std::get<std::string>(data);
-        const QByteArray messageBytes = QByteArray::fromRawData(message.data(), static_cast<int>(message.size()));
-        LOG_TRACE("File text channel received text message, size={} bytes", messageBytes.size());
-
-        QJsonParseError parseError{};
-        QJsonDocument doc = QJsonDocument::fromJson(messageBytes, &parseError);
-        if (parseError.error != QJsonParseError::NoError)
-        {
-            LOG_ERROR("File text channel message parse error: {}", parseError.errorString());
-            return;
-        }
-
-        const QJsonObject object = doc.object();
-        if (JsonUtil::getString(object, Constant::KEY_MSGTYPE) == Constant::TYPE_FILE_TRANSFER_CANCEL)
-        {
-            const QString transferId = JsonUtil::getString(object, Constant::KEY_TRANSFER_ID);
-            markTransferCancelled(transferId);
-            if (m_filePacketUtil)
-                m_filePacketUtil->cancelTransfer(transferId);
-            LOG_INFO("Received transfer cancel: {}", transferId);
-            return;
-        }
-
-        parseFileMsg(object);
+        return false;
     }
+
+    const QString transferId = JsonUtil::getString(object, Constant::KEY_TRANSFER_ID);
+    markTransferCancelled(transferId);
+    if (m_filePacketUtil)
+        m_filePacketUtil->cancelTransfer(transferId);
+    LOG_INFO("Received immediate transfer cancel: {}", transferId);
+    return true;
+}
+
+
+void WebRtcCli::drainFileTextIngress()
+{
+    QQueue<QByteArray> messages;
+    bool scheduleAgain = false;
+    {
+        QMutexLocker locker(&m_fileTextIngressMutex);
+        while (!m_fileTextIngress.isEmpty() && messages.size() < kFileTextIngressBatchSize)
+        {
+            QByteArray message = m_fileTextIngress.dequeue();
+            m_fileTextIngressBytes -= message.size();
+            messages.enqueue(std::move(message));
+        }
+        scheduleAgain = !m_fileTextIngress.isEmpty();
+        m_fileTextIngressScheduled = scheduleAgain;
+    }
+
+    while (!messages.isEmpty() && !m_shutdownStarted.load())
+        processFileTextChannelMessage(messages.dequeue());
+
+    if (scheduleAgain && !m_shutdownStarted.load())
+    {
+        const QPointer<WebRtcCli> guard(this);
+        m_callbackDispatcher->post([guard]() {
+            if (guard)
+                guard->drainFileTextIngress();
+        });
+    }
+}
+
+
+void WebRtcCli::processFileTextChannelMessage(const QByteArray &messageBytes)
+{
+    LOG_TRACE("File text channel received text message, size={} bytes", messageBytes.size());
+
+    QJsonParseError parseError{};
+    QJsonDocument doc = QJsonDocument::fromJson(messageBytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError)
+    {
+        LOG_ERROR("File text channel message parse error: {}", parseError.errorString());
+        return;
+    }
+
+    const QJsonObject object = doc.object();
+    if (JsonUtil::getString(object, Constant::KEY_MSGTYPE) == Constant::TYPE_FILE_TRANSFER_CANCEL)
+    {
+        const QString transferId = JsonUtil::getString(object, Constant::KEY_TRANSFER_ID);
+        markTransferCancelled(transferId);
+        if (m_filePacketUtil)
+            m_filePacketUtil->cancelTransfer(transferId);
+        LOG_INFO("Received transfer cancel: {}", transferId);
+        return;
+    }
+
+    parseFileMsg(object);
 }
 
 
@@ -305,6 +416,8 @@ void WebRtcCli::onFileTextChannelError(std::string error)
         return;
     }
     LOG_ERROR("File text channel error: {}", error);
+    m_disconnectReason = QStringLiteral("file_text_channel_error");
+    emit destroyCli();
 }
 
 
@@ -322,4 +435,13 @@ void WebRtcCli::onFileTextChannelClosed()
         return;
     }
     LOG_INFO("File text channel closed");
+    {
+        QMutexLocker locker(&m_fileTextIngressMutex);
+        m_fileTextIngress.clear();
+        m_fileTextIngressBytes = 0;
+        m_fileTextIngressScheduled = false;
+        m_fileTextIngressOverflowed.store(false);
+    }
+    m_disconnectReason = QStringLiteral("file_text_channel_closed");
+    emit destroyCli();
 }

@@ -30,6 +30,19 @@ struct MediaStats
     std::string qualityLimitationReason;
 };
 
+struct IceCandidateInfo
+{
+    std::string candidateType;
+    std::string protocol;
+    std::string relayProtocol;
+};
+
+struct SelectedCandidatePair
+{
+    IceCandidateInfo local;
+    IceCandidateInfo remote;
+};
+
 struct VideoCodecCapability
 {
     std::string codec;

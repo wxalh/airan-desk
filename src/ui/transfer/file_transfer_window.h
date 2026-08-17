@@ -205,6 +205,8 @@ private:
 
     QDir currentLocalDir;
     QString currentRemotePath; 
+    QString m_pendingFileListRequestId;
+    QString m_pendingFileListRequestPath;
     QIcon dirIcon;
     QIcon fileIcon;
 

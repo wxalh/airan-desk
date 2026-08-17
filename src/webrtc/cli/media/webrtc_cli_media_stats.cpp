@@ -237,24 +237,39 @@ void WebRtcCli::queryMediaStats()
 {
     if (m_isOnlyFile || !m_peerConnection || m_destroying)
         return;
+    bool expected = false;
+    if (!m_mediaStatsQueryInFlight.compare_exchange_strong(expected, true))
+        return;
 
     QPointer<WebRtcCli> self(this);
     const auto callbackLifetime = m_callbackLifetime;
-    m_peerConnection->queryMediaStats([self, callbackLifetime](rtc::MediaStats stats) {
-        auto permit = callbackLifetime->tryEnter();
-        if (!permit)
-            return;
-        if (!self)
-            return;
-        QMetaObject::invokeMethod(self.data(), "applyMediaStats", Qt::QueuedConnection,
-                                  Q_ARG(QString, QString::fromStdString(stats.videoCodec).trimmed()),
-                                  Q_ARG(QString, QString::fromStdString(stats.encoderImplementation).trimmed()),
-                                  Q_ARG(double, stats.availableOutgoingBitrateBps),
-                                  Q_ARG(double, stats.targetBitrateBps),
-                                  Q_ARG(double, stats.fractionLost),
-                                  Q_ARG(double, stats.rttMs),
-                                  Q_ARG(QString, QString::fromStdString(stats.qualityLimitationReason).trimmed()));
-    });
+    try
+    {
+        m_peerConnection->queryMediaStats([self, callbackLifetime](rtc::MediaStats stats) {
+            auto permit = callbackLifetime->tryEnter();
+            if (!permit || !self)
+                return;
+            self->m_mediaStatsQueryInFlight.store(false);
+            QMetaObject::invokeMethod(self.data(), "applyMediaStats", Qt::QueuedConnection,
+                                      Q_ARG(QString, QString::fromStdString(stats.videoCodec).trimmed()),
+                                      Q_ARG(QString, QString::fromStdString(stats.encoderImplementation).trimmed()),
+                                      Q_ARG(double, stats.availableOutgoingBitrateBps),
+                                      Q_ARG(double, stats.targetBitrateBps),
+                                      Q_ARG(double, stats.fractionLost),
+                                      Q_ARG(double, stats.rttMs),
+                                      Q_ARG(QString, QString::fromStdString(stats.qualityLimitationReason).trimmed()));
+        });
+    }
+    catch (const std::exception &e)
+    {
+        m_mediaStatsQueryInFlight.store(false);
+        LOG_WARN("Failed to query media stats: {}", e.what());
+    }
+    catch (...)
+    {
+        m_mediaStatsQueryInFlight.store(false);
+        LOG_WARN("Failed to query media stats: unknown error");
+    }
 }
 
 

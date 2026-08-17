@@ -10,9 +10,6 @@
 #include "desktop_capture/win/dxgi_duplicator_controller.h"
 #include "desktop_capture/win/screen_capturer_win_directx.h"
 #endif
-#if defined(RTC_ENABLE_WIN_WGC)
-#include "desktop_capture/win/wgc_capturer_win.h"
-#endif
 #endif
 #if defined(WEBRTC_MAC) && !defined(WEBRTC_IOS)
 #include "desktop_capture/mac/desktop_configuration.h"
@@ -86,7 +83,7 @@ bool buildExpectedWindowsSourceList(airan::desktop_capture::DesktopCapturer::Sou
     deviceNames->clear();
 
 #if defined(RTC_ENABLE_WIN_WGC)
-    if (ConfigUtil->enable_wgc_capture && airan::desktop_capture::IsWgcSupported(airan::desktop_capture::CaptureType::kScreen))
+    if (ConfigUtil->enable_wgc_capture)
         return airan::desktop_capture::GetScreenList(sources, deviceNames);
 #endif
 
@@ -308,15 +305,44 @@ QVector<ScreenCatalogEntry> buildScreenCatalogSnapshot()
 }
 }
 
-QString WebRtcCli::currentScreenId() const
+void WebRtcCli::initializeScreenSelection()
 {
     const QVector<ScreenCatalogEntry> catalog = buildScreenCatalogSnapshot();
+    const ScreenCatalogEntry *selected = nullptr;
     for (const ScreenCatalogEntry &entry : catalog)
     {
         if (entry.index == m_screenIndex)
-            return entry.id;
+        {
+            selected = &entry;
+            break;
+        }
     }
-    return catalog.isEmpty() ? QString() : catalog.first().id;
+    if (!selected && !catalog.isEmpty())
+        selected = &catalog.first();
+    if (!selected)
+        return;
+
+    m_screenIndex = selected->index;
+    m_currentDesktopSourceIndex = selected->index;
+    m_currentDesktopSourceId = selected->sourceId;
+    m_currentDesktopSourceHasId = selected->hasSourceId;
+    m_screenId = selected->id;
+    m_currentDesktopSourceRect = selected->rect;
+    m_screen_width = qMax(1, selected->rect.width());
+    m_screen_height = qMax(1, selected->rect.height());
+    calculateEncodeResolution(m_requestedEncodeWidth, m_requestedEncodeHeight);
+    LOG_INFO("Initial desktop capture screen selected: id={}, index={}, sourceId={}, hasSourceId={}, size={}x{}",
+             m_screenId,
+             m_screenIndex,
+             m_currentDesktopSourceId,
+             m_currentDesktopSourceHasId,
+             m_screen_width,
+             m_screen_height);
+}
+
+QString WebRtcCli::currentScreenId() const
+{
+    return m_screenId;
 }
 
 int WebRtcCli::screenIndexForId(const QString &screenId) const
@@ -644,6 +670,8 @@ void WebRtcCli::selectScreenById(const QString &screenId, bool updateTrack)
 
     m_screenIndex = newScreenIndex;
     m_currentDesktopSourceIndex = newDesktopSourceIndex;
+    m_currentDesktopSourceId = newDesktopSourceId;
+    m_currentDesktopSourceHasId = hasDesktopSourceId;
     m_screenId = resolvedId;
     m_currentDesktopSourceRect = desktopSourceRect;
     m_screen_width = screenSize.width();

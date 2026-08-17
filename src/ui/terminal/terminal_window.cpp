@@ -56,6 +56,7 @@ void TerminalWindow::beginAsyncShutdown()
     disconnect(this, nullptr, &m_rtcCtl, nullptr);
     disconnect(&m_rtcCtl, nullptr, this, nullptr);
     disconnect(&m_rtcCtl, nullptr, m_terminal, nullptr);
+    m_rtcCtl.requestShutdown();
 
     if (m_rtcThread.isRunning())
     {

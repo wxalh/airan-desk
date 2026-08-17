@@ -6,16 +6,12 @@
 #include "ui/transfer/task/transfer_path_util.h"
 
 #include <QDir>
-#include <QDirIterator>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QLineEdit>
 #include <QTableWidget>
-
-#include <limits>
-
 
 QStringList TerminalFilePanel::selectedRemotePaths() const
 {
@@ -280,24 +276,7 @@ qint64 TerminalFilePanel::collectDirectoryStats(const QString &path, int *fileCo
             *fileCount = 1;
         return qMax<qint64>(0, info.size());
     }
-
-    qint64 totalBytes = 0;
-    int totalFiles = 0;
-    QDirIterator it(path,
-                    QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext())
-    {
-        const qint64 fileSize = qMax<qint64>(0, QFileInfo(it.next()).size());
-        totalBytes = totalBytes <= (std::numeric_limits<qint64>::max)() - fileSize
-                         ? totalBytes + fileSize
-                         : (std::numeric_limits<qint64>::max)();
-        if (totalFiles < (std::numeric_limits<int>::max)())
-            ++totalFiles;
-    }
-    if (fileCount)
-        *fileCount = totalFiles;
-    return totalBytes;
+    return 0;
 }
 
 

@@ -7,7 +7,10 @@ bool TerminalSession::startFallbackProcess()
 {
     m_usingFallbackProcess = true;
 #if defined(Q_OS_WIN)
-    return startWindowsFallbackProcess();
+    const bool started = startWindowsFallbackProcess();
+    if (!started)
+        m_usingFallbackProcess = false;
+    return started;
 #else
     m_process = new QProcess(this);
     m_process->setProgram(defaultShell());
@@ -17,15 +20,25 @@ bool TerminalSession::startFallbackProcess()
     connect(m_process, &QProcess::readyRead, this, &TerminalSession::onFallbackReadyRead);
     connect(m_process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, &TerminalSession::onFallbackFinished);
-    connect(m_process, QOverload<QProcess::ProcessError>::of(&QProcess::errorOccurred),
-            this, &TerminalSession::onFallbackError);
 
     m_process->start();
     if (!m_process->waitForStarted(3000))
     {
-        emit errorOccurred(m_process->errorString());
+        const QString error = m_process->errorString();
+        m_process->terminate();
+        if (!m_process->waitForFinished(1000))
+        {
+            m_process->kill();
+            m_process->waitForFinished(1000);
+        }
+        m_process->deleteLater();
+        m_process = nullptr;
+        m_usingFallbackProcess = false;
+        emit errorOccurred(error);
         return false;
     }
+    connect(m_process, QOverload<QProcess::ProcessError>::of(&QProcess::errorOccurred),
+            this, &TerminalSession::onFallbackError);
     return true;
 #endif
 }
@@ -33,6 +46,8 @@ bool TerminalSession::startFallbackProcess()
 
 void TerminalSession::onFallbackReadyRead()
 {
+    if (sender() && sender() != m_process)
+        return;
     if (m_stopping.load() || m_outputPaused.load())
         return;
     if (m_process)
@@ -50,12 +65,27 @@ void TerminalSession::onFallbackReadyRead()
 
 void TerminalSession::onFallbackFinished(int exitCode, QProcess::ExitStatus)
 {
+    auto *process = qobject_cast<QProcess *>(sender());
+    if (!process || process != m_process)
+        return;
+
+    if (!m_stopping.load() && !m_outputPaused.load())
+    {
+        const QByteArray data = process->readAll();
+        if (!data.isEmpty())
+            emit outputReady(data);
+    }
+    m_process = nullptr;
+    m_usingFallbackProcess = false;
+    process->deleteLater();
     emitClosedOnce(exitCode);
 }
 
 
 void TerminalSession::onFallbackError(QProcess::ProcessError)
 {
+    if (sender() != m_process)
+        return;
     emit errorOccurred(m_process ? m_process->errorString() : QStringLiteral("Terminal process error"));
 }
 

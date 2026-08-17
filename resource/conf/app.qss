@@ -395,3 +395,47 @@ QScrollBar::sub-line {
 QDialogButtonBox QPushButton {
     min-width: 86px;
 }
+
+/* Custom title bars must win over window-scoped QPushButton rules. */
+#appTitleBar #appTitleBarMinimize,
+#appTitleBar #appTitleBarMaximize,
+#appTitleBar #appTitleBarClose {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    color: rgb(131, 193, 224);
+    padding: 0;
+}
+
+#appTitleBar #appTitleBarMinimize:hover,
+#appTitleBar #appTitleBarMaximize:hover {
+    background-color: #3a3a3a;
+    color: white;
+}
+
+#appTitleBar #appTitleBarMinimize[titleBarHover="true"],
+#appTitleBar #appTitleBarMaximize[titleBarHover="true"] {
+    background-color: #3a3a3a;
+    color: white;
+}
+
+#appTitleBar #appTitleBarMinimize:pressed,
+#appTitleBar #appTitleBarMaximize:pressed {
+    background-color: #4a4a4a;
+    color: white;
+}
+
+#appTitleBar #appTitleBarClose:hover {
+    background-color: #c84456;
+    color: white;
+}
+
+#appTitleBar #appTitleBarClose[titleBarHover="true"] {
+    background-color: #c84456;
+    color: white;
+}
+
+#appTitleBar #appTitleBarClose:pressed {
+    background-color: #a83242;
+    color: white;
+}

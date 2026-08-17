@@ -4,17 +4,46 @@
 #include "util/clipboard/native/clipboard_file_promise.h"
 
 #include <QMutexLocker>
+#include <QElapsedTimer>
+
+void WebRtcCtl::wakeClipboardWaitersForShutdown()
+{
+    QMutexLocker locker(&m_transferMutex);
+    for (const QString &path : m_pendingClipboardPromiseTargets)
+        m_clipboardPromiseDownloadResults.insert(path, false);
+    for (const QString &requestId : m_pendingClipboardStreamRequests.keys())
+        m_clipboardStreamErrors.insert(requestId, QStringLiteral("Session closed."));
+    m_clipboardPromiseDownloadWait.wakeAll();
+    m_clipboardStreamWait.wakeAll();
+}
 
 void WebRtcCtl::destroy()
 {
+    QElapsedTimer shutdownTimer;
+    shutdownTimer.start();
+    LOG_DEBUG("WebRtcCtl shutdown started");
     if (m_shutdownStarted.exchange(true))
         return;
+    wakeClipboardWaitersForShutdown();
     m_callbackLifetime->closeAndWait();
+    LOG_DEBUG("WebRtcCtl shutdown stage callback-lifetime closed: elapsedMs={}", shutdownTimer.elapsed());
     failClipboardChunkSendQueue();
     clearClipboardPayloadTransferState();
     LOG_DEBUG("WebRtcCtl destroy started");
     m_connected = false;
+    m_pendingFileTextMessages.clear();
+    m_pendingFileTextMessageBytes = 0;
+    m_pendingInputControlMessages.clear();
+    m_pendingInputControlMessageBytes = 0;
+    m_pendingClipboardControlMessages.clear();
+    m_pendingClipboardControlMessageBytes = 0;
+    m_pendingUploads.clear();
+    m_lastSessionHeartbeatSentMs = 0;
     m_remoteDescriptionSet = false;
+    m_remoteDescriptionInFlight = false;
+    m_pendingRemoteDescriptionData.clear();
+    m_pendingRemoteDescriptionType.clear();
+    m_pendingRemoteDescriptionObject = QJsonObject();
     m_pendingRemoteCandidates.clear();
     m_pendingClipboardUploadPayloads.clear();
     m_pendingClipboardUploadTargets.clear();
@@ -33,6 +62,16 @@ void WebRtcCtl::destroy()
         m_fileIngressDrained.wakeAll();
     }
     {
+        QMutexLocker locker(&m_videoFrameIngressMutex);
+        m_pendingVideoFrameBytes.clear();
+        m_pendingVideoFrameTimestampUs = 0;
+        m_pendingVideoFrameKind = 0;
+        m_videoFrameIngressScheduled = false;
+#if defined(_WIN32) && defined(AIRAN_WEBRTC_WINDOWS_PLATFORM_WIN10)
+        m_pendingD3D11VideoFrame = rtc::D3D11VideoFrame{};
+#endif
+    }
+    {
         QMutexLocker locker(&m_transferMutex);
         for (const QString &path : m_pendingClipboardPromiseTargets)
             m_clipboardPromiseDownloadResults.insert(path, false);
@@ -45,6 +84,7 @@ void WebRtcCtl::destroy()
         m_clipboardPromiseRemotePathToTotalBytes.clear();
         m_clipboardPromiseRemotePathToTransferredBytes.clear();
         m_startedClipboardPromiseRemotePaths.clear();
+        m_cancelledTransfers.clear();
         m_clipboardStreamChunks.clear();
         m_clipboardStreamErrors.clear();
         m_pendingClipboardStreamRequests.clear();
@@ -58,6 +98,8 @@ void WebRtcCtl::destroy()
         m_inputMoveTailTimer->stop();
     if (m_sessionHeartbeatTimer)
         m_sessionHeartbeatTimer->stop();
+    if (m_peerStartupTimer)
+        m_peerStartupTimer->stop();
     resetInputMoveBurst();
     if (m_terminalOutputFlushTimer)
         m_terminalOutputFlushTimer->stop();
@@ -66,14 +108,19 @@ void WebRtcCtl::destroy()
         m_fileTextIngress.clear();
         m_fileTextIngressBytes.store(0);
         m_fileTextIngressScheduled = false;
+        m_fileTextIngressOverflowed.store(false);
     }
     m_pendingTerminalOutput.clear();
+    m_terminalStartRequestId.clear();
+    m_latestFileListRequestId.clear();
     m_terminalOutputInFlight = 0;
     m_terminalConsumerBacklog = 0;
     m_terminalFlowPaused = false;
+    m_terminalOutputNeedsReset = false;
     stopAudioCapture();
     stopAudioPlayback();
     m_audioMode = QStringLiteral("off");
+    LOG_DEBUG("WebRtcCtl shutdown stage terminal/audio stopped: elapsedMs={}", shutdownTimer.elapsed());
     
     
     if (m_inputChannel)
@@ -123,6 +170,7 @@ void WebRtcCtl::destroy()
         m_heartbeatChannel->close();
         m_heartbeatChannel = nullptr;
     }
+    LOG_DEBUG("WebRtcCtl shutdown stage data channels closed: elapsedMs={}", shutdownTimer.elapsed());
 
     
     if (m_remoteAudioTrack)
@@ -157,6 +205,7 @@ void WebRtcCtl::destroy()
         m_peerConnection->close();
         m_peerConnection = nullptr;
     }
+    LOG_DEBUG("WebRtcCtl shutdown stage peer connection closed: elapsedMs={}", shutdownTimer.elapsed());
 
     if (m_filePacketUtil)
     {
@@ -174,10 +223,5 @@ void WebRtcCtl::destroy()
         ClipboardFilePromise::cancelCacheRoot(cacheRoot);
         ClipboardUtil::cleanupCacheRootAsync(cacheRoot);
     }
-    m_clipboardInboundTextChunks.clear();
-    m_clipboardInboundTextChunkCounts.clear();
-    m_clipboardInboundTextNextIndexes.clear();
-    m_clipboardInboundTextExpectedBytes.clear();
-    m_clipboardInboundTextPasteAfterApply.clear();
-    LOG_INFO("WebRtcCtl destroyed");
+    LOG_INFO("WebRtcCtl destroyed: elapsedMs={}", shutdownTimer.elapsed());
 }

@@ -9,8 +9,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 download_dir="$repo_root/third_party/_downloads"
 webrtc_dir="$repo_root/third_party/webrtc"
 ffmpeg_dir="$repo_root/third_party/ffmpeg-builds"
-webrtc_marker="$webrtc_dir/.airan-package-sha256"
-webrtc_identity_marker="$webrtc_dir/.airan-package-id"
 
 mkdir -p "$download_dir" "$webrtc_dir" "$ffmpeg_dir"
 
@@ -202,11 +200,21 @@ verify_webrtc_archive() {
 }
 
 webrtc_prepared_matches() {
-  local expected="$1"
   webrtc_ready || return 1
-  [[ -f "$webrtc_marker" && -f "$webrtc_identity_marker" \
-    && "$(cat "$webrtc_marker")" == "$expected" \
-    && "$(cat "$webrtc_identity_marker")" == "$webrtc_package" ]]
+  local metadata_path="$webrtc_dir/PACKAGE-METADATA.json"
+  [[ -f "$metadata_path" ]] || return 1
+  python3 - "$metadata_path" "$webrtc_package" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        metadata = json.load(stream)
+except (OSError, ValueError):
+    raise SystemExit(1)
+
+raise SystemExit(0 if metadata.get("package") == sys.argv[2] else 1)
+PY
 }
 
 expand_webrtc() {
@@ -221,8 +229,10 @@ expand_webrtc() {
   echo "Extracting WebRTC package: $webrtc_package"
   find "$webrtc_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
   zstd -d --stdout "$archive" | tar -x -C "$webrtc_dir" --strip-components=1
-  printf '%s' "$expected" > "$webrtc_marker"
-  printf '%s' "$webrtc_package" > "$webrtc_identity_marker"
+  if ! webrtc_prepared_matches; then
+    echo "Extracted WebRTC package metadata is missing or mismatched: $archive" >&2
+    return 1
+  fi
 }
 
 expand_ffmpeg() {
@@ -252,7 +262,7 @@ manifest_file="$(copy_or_refresh "$webrtc_manifest" "$webrtc_release_url/$webrtc
 webrtc_archive="$(python3 "$webrtc_resolver" --manifest "$manifest_file" --package "$webrtc_package" --field asset)"
 webrtc_sha256="$(python3 "$webrtc_resolver" --manifest "$manifest_file" --package "$webrtc_package" --field sha256)"
 webrtc_size="$(python3 "$webrtc_resolver" --manifest "$manifest_file" --package "$webrtc_package" --field size)"
-if webrtc_prepared_matches "$webrtc_sha256"; then
+if webrtc_prepared_matches; then
   echo "WebRTC package already prepared"
 else
   webrtc_archive_path="$(copy_or_download "$webrtc_archive" "$webrtc_release_url/$webrtc_archive" "$webrtc_size")"

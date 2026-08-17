@@ -35,6 +35,7 @@ protected:
 
 public slots:
     void setConnected(bool connected);
+    void setPendingFileListRequestId(const QString &requestId);
     void setRemotePath(const QString &path);
     void followTerminalPath(const QString &path);
     void recvGetFileList(const QJsonObject &object);
@@ -150,6 +151,8 @@ private:
     bool m_updatingDriveCombo = false;
     QPoint m_remoteDragStartPos;
     QString m_currentRemotePath;
+    QString m_loadedRemotePath;
+    QString m_pendingFileListRequestId;
     QStringList m_mountedPaths;
     QJsonArray m_remoteFiles;
     QIcon m_dirIcon;

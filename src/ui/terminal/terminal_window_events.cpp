@@ -25,10 +25,20 @@ void TerminalWindow::onTerminalInfo(const QString &osName,
                                     const QString &shellPath,
                                     const QString &mode,
                                     bool pathTracking,
-                                    bool pathTrackingReady)
+                                    bool pathTrackingReady,
+                                    const QString &requestId)
 {
-    if (isClosing())
+    if (isClosing() || !m_started)
         return;
+    const bool legacyResponse = requestId.isEmpty();
+    const bool fallbackResponse = mode.compare(QStringLiteral("pipe"), Qt::CaseInsensitive) == 0;
+    if ((!legacyResponse && requestId != m_terminalStartRequestId) ||
+        (legacyResponse && m_terminalFallbackRequested && !fallbackResponse))
+        return;
+    if (m_terminalStartTimer)
+        m_terminalStartTimer->stop();
+    m_terminalFallbackRequested = false;
+    m_terminalLegacyResponseMode = legacyResponse;
     m_remoteOs = osName;
     m_remoteShell = shellPath;
     m_remoteTerminalMode = mode;
@@ -45,18 +55,40 @@ void TerminalWindow::onTerminalInfo(const QString &osName,
 }
 
 
-void TerminalWindow::onTerminalClosed(int exitCode)
+void TerminalWindow::onTerminalClosed(int exitCode, const QString &requestId)
 {
-    if (isClosing())
+    if (isClosing() || !m_started)
         return;
+    if (!requestId.isEmpty() && requestId != m_terminalStartRequestId)
+        return;
+    if (requestId.isEmpty() && !m_terminalLegacyResponseMode)
+        return;
+    if (requestId.isEmpty() && m_terminalFallbackRequested)
+        return;
+    m_started = false;
+    m_terminalFallbackRequested = false;
+    m_terminalLegacyResponseMode = false;
+    if (m_terminalStartTimer)
+        m_terminalStartTimer->stop();
     m_terminal->showStatusLine(tr("[Remote terminal exited with code %1]").arg(exitCode));
 }
 
 
-void TerminalWindow::onTerminalError(const QString &message)
+void TerminalWindow::onTerminalError(const QString &message, const QString &requestId)
 {
-    if (isClosing())
+    if (isClosing() || !m_started)
         return;
+    if (!requestId.isEmpty() && requestId != m_terminalStartRequestId)
+        return;
+    if (requestId.isEmpty() && !m_terminalLegacyResponseMode)
+        return;
+    if (requestId.isEmpty() && m_terminalFallbackRequested)
+        return;
+    m_started = false;
+    m_terminalFallbackRequested = false;
+    m_terminalLegacyResponseMode = false;
+    if (m_terminalStartTimer)
+        m_terminalStartTimer->stop();
     m_terminal->showStatusLine(tr("[Terminal error] %1").arg(message));
     if (RuntimeEnvironment::uiAvailable())
         QMessageBox::warning(this, tr("Terminal Error"), message);

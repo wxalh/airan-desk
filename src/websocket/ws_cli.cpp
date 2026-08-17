@@ -2,12 +2,6 @@
 
 #include <QMetaObject>
 
-namespace
-{
-constexpr quint64 kMaxWebSocketMessageBytes = 8ULL * 1024 * 1024;
-}
-
-
 bool WsCli::isSupportedSignalingUrl(const QUrl &url)
 {
     if (!url.isValid() || url.host().isEmpty())
@@ -60,6 +54,7 @@ void WsCli::performShutdown()
     emit stopHeartTimer();
     emit stopReconnectTimer();
     m_connected = false;
+    clearPendingMessages();
 
     destroySocket();
 }
@@ -105,8 +100,11 @@ void WsCli::init(const QString &url, quint64 heart_interval_ms)
     m_heart_interval_ms = heart_interval_ms;
     m_url = QUrl(url.trimmed(), QUrl::StrictMode);
     m_connected = false;
+    ++m_messageGeneration;
+    m_socketConnectTimer.invalidate();
     m_reconnect_phase = 0;
     m_reconnect_count = 0;
+    clearPendingMessages();
     destroySocket();
 
     if (!isSupportedSignalingUrl(m_url))
@@ -117,7 +115,7 @@ void WsCli::init(const QString &url, quint64 heart_interval_ms)
 
     m_ws = new QWebSocket();
 #if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
-    m_ws->setMaxAllowedIncomingMessageSize(kMaxWebSocketMessageBytes);
+    m_ws->setMaxAllowedIncomingMessageSize(static_cast<quint64>(kMaxInboundMessageBytes));
 #endif
 
     connect(this, &WsCli::wsClose, m_ws, &QWebSocket::close);
@@ -140,6 +138,7 @@ void WsCli::init(const QString &url, quint64 heart_interval_ms)
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WsCli::onWsTextMessageReceived);
 
     LOG_INFO("Opening configured signaling connection");
+    m_socketConnectTimer.start();
     emit wsOpen(m_url);
 }
 
@@ -148,8 +147,11 @@ void WsCli::resetUrlAndReconnect(const QString &url)
 {
     m_url = QUrl(url.trimmed(), QUrl::StrictMode);
     m_connected = false;
+    ++m_messageGeneration;
+    m_socketConnectTimer.invalidate();
     m_reconnect_phase = 0;
     m_reconnect_count = 0;
+    clearPendingMessages();
     emit stopHeartTimer();
     emit stopReconnectTimer();
 
@@ -169,5 +171,6 @@ void WsCli::resetUrlAndReconnect(const QString &url)
 
     LOG_INFO("Signaling URL updated; reconnecting");
     m_ws->abort();
+    m_socketConnectTimer.start();
     m_ws->open(m_url);
 }

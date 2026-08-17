@@ -48,6 +48,7 @@ std::shared_ptr<DataChannel> PeerConnection::createDataChannel(const std::string
     if (!native)
         return nullptr;
     auto channel = std::make_shared<DataChannel>(native);
+    pruneClosedDataChannels();
     m_channels.push_back(channel);
     return channel;
 }
@@ -80,6 +81,7 @@ std::shared_ptr<DataChannel> PeerConnection::createDataChannel(const std::string
     if (!native)
         return nullptr;
     auto channel = std::make_shared<DataChannel>(native);
+    pruneClosedDataChannels();
     m_channels.push_back(channel);
     return channel;
 }

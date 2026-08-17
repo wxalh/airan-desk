@@ -10,12 +10,27 @@
 #include "webrtc/cli/lifecycle/webrtc_cli_session_shutdown.h"
 
 #include <QMetaObject>
+#include <QPointer>
 #include <QThread>
+
+namespace
+{
+constexpr int kMaxControlledSessionCount = 16;
+constexpr int kMaxControlledSessionsPerPeer = 8;
+
+void finishUnusedAuditSession(const std::shared_ptr<AuditSession> &auditSession,
+                              const QString &reason)
+{
+    if (auditSession)
+        auditSession->finish(reason);
+}
+}
 
 void HeadlessController::cleanupWebRtcCliSessions()
 {
     auto sessions = m_rtcCliSessions;
     m_rtcCliSessions.clear();
+    m_rtcCliShutdownPending.clear();
     for (auto it = sessions.begin(); it != sessions.end(); ++it)
     {
         WebRtcCli *webrtcCli = it.key();
@@ -85,7 +100,9 @@ void HeadlessController::completeIncomingConnectRequest(const QString &sender,
 }
 
 
-void HeadlessController::sendIncomingConnectError(const QString &sender, const QString &reason)
+void HeadlessController::sendIncomingConnectError(const QString &sender,
+                                                  const QString &reason,
+                                                  const QString &sessionId)
 {
     if (!m_ws || m_shuttingDown)
         return;
@@ -100,6 +117,7 @@ void HeadlessController::sendIncomingConnectError(const QString &sender, const Q
                                .add(Constant::KEY_TYPE, Constant::TYPE_ERROR)
                                .add(Constant::KEY_SENDER, ConfigUtil->local_id)
                                .add(Constant::KEY_RECEIVER, sender)
+                               .add(Constant::KEY_SESSION_ID, sessionId)
                                .add(Constant::KEY_DATA, error)
                                .build();
     QMetaObject::invokeMethod(m_ws, "sendWsCliTextMsg", Qt::QueuedConnection,
@@ -112,7 +130,10 @@ void HeadlessController::startAuthorizedIncomingSession(const QString &sender,
                                                         const ControlledAccessDecision &decision)
 {
     if (m_shuttingDown)
+    {
+        finishUnusedAuditSession(decision.auditSession, QStringLiteral("application_shutdown"));
         return;
+    }
 
     if (!decision.accepted)
     {
@@ -120,11 +141,74 @@ void HeadlessController::startAuthorizedIncomingSession(const QString &sender,
         const QString notificationDetail = isOnlyFile ? QStringLiteral("file") : QStringLiteral("desktop");
         if (decision.reason == QStringLiteral("authentication_failed"))
             NotificationScriptRunner::runAsync(this, QStringLiteral("authentication_failed"), sender, notificationDetail);
-        sendIncomingConnectError(sender, decision.reason);
+        sendIncomingConnectError(sender, decision.reason, decision.sessionId);
         return;
     }
 
     const bool isOnlyFile = JsonUtil::getBool(object, Constant::KEY_IS_ONLY_FILE, false);
+    const QString sessionLabel = JsonUtil::getString(object, Constant::KEY_LABEL_NAME);
+    const QString sessionMode = sessionLabel.startsWith(QStringLiteral("terminal-"))
+                                    ? QStringLiteral("terminal")
+                                    : (isOnlyFile ? QStringLiteral("file")
+                                                  : QStringLiteral("desktop"));
+
+    for (auto it = m_rtcCliSessions.cbegin(); it != m_rtcCliSessions.cend(); ++it)
+    {
+        if (it.key() && !m_rtcCliShutdownPending.contains(it.key()) &&
+            it.key()->remoteId() == decision.peerId && it.key()->sessionId() == decision.sessionId)
+        {
+            LOG_WARN("Ignoring duplicate WebRtcCli session retry in headless controller: sessionId={}",
+                     decision.sessionId);
+            finishUnusedAuditSession(decision.auditSession,
+                                     QStringLiteral("duplicate_session_retry"));
+            return;
+        }
+    }
+
+    for (auto it = m_rtcCliSessions.cbegin(); it != m_rtcCliSessions.cend(); ++it)
+    {
+        if (it.key() && !m_rtcCliShutdownPending.contains(it.key()) &&
+            it.key()->remoteId() == decision.peerId &&
+            it.key()->controlledSessionMode() == sessionMode &&
+            !it.key()->isConnected())
+        {
+            LOG_WARN("Ignoring duplicate pending WebRtcCli session retry in headless controller: peer={}, mode={}, sessionId={}, existingSessionId={}",
+                     decision.peerId,
+                     sessionMode,
+                     decision.sessionId,
+                     it.key()->sessionId());
+            sendIncomingConnectError(sender,
+                                     QStringLiteral("duplicate_pending_session_retry"),
+                                     decision.sessionId);
+            finishUnusedAuditSession(decision.auditSession,
+                                     QStringLiteral("duplicate_pending_session_retry"));
+            return;
+        }
+    }
+
+    int activeSessionCount = 0;
+    int peerSessionCount = 0;
+    for (auto it = m_rtcCliSessions.cbegin(); it != m_rtcCliSessions.cend(); ++it)
+    {
+        if (!it.key() || m_rtcCliShutdownPending.contains(it.key()))
+            continue;
+        ++activeSessionCount;
+        if (it.key()->remoteId() == decision.peerId)
+            ++peerSessionCount;
+    }
+    if (activeSessionCount >= kMaxControlledSessionCount ||
+        peerSessionCount >= kMaxControlledSessionsPerPeer)
+    {
+        LOG_WARN("Rejecting headless controlled session because the resource limit was reached: total={}, peer={}, sender={}, sessionId={}",
+                 activeSessionCount,
+                 peerSessionCount,
+                 decision.peerId,
+                 decision.sessionId);
+        sendIncomingConnectError(sender, QStringLiteral("session_limit"), decision.sessionId);
+        finishUnusedAuditSession(decision.auditSession, QStringLiteral("session_limit"));
+        return;
+    }
+
     const int fps = JsonUtil::getInt(object, Constant::KEY_FPS, 25);
     const int requestedWidth = JsonUtil::getInt(object, Constant::KEY_WIDTH, -1);
     const int requestedHeight = JsonUtil::getInt(object, Constant::KEY_HEIGHT, -1);
@@ -133,12 +217,6 @@ void HeadlessController::startAuthorizedIncomingSession(const QString &sender,
     const QString qualityProfile = JsonUtil::getString(object, Constant::KEY_QUALITY_PROFILE, QStringLiteral("auto"));
     const QString audioMode = JsonUtil::getString(object, Constant::KEY_AUDIO_MODE, QStringLiteral("off"));
     const QString sessionId = decision.sessionId;
-    const QString sessionLabel = JsonUtil::getString(object, Constant::KEY_LABEL_NAME);
-    const QString sessionMode = sessionLabel.startsWith(QStringLiteral("terminal-"))
-                                    ? QStringLiteral("terminal")
-                                    : (isOnlyFile ? QStringLiteral("file")
-                                                  : QStringLiteral("desktop"));
-
     LOG_INFO("Received headless connection request; initial desktop constraint {}x{}, networkPath={}, mediaTopology={}, qualityProfile={}, audioMode={}",
              requestedWidth,
              requestedHeight,
@@ -161,8 +239,14 @@ void HeadlessController::startAuthorizedIncomingSession(const QString &sender,
     connect(m_ws, &WsCli::onWsCliRecvTextMsg, rtcCli, &WebRtcCli::onWsCliRecvTextMsg);
     connect(rtcCli, &WebRtcCli::sendWsCliBinaryMsg, m_ws, &WsCli::sendWsCliBinaryMsg);
     connect(rtcCli, &WebRtcCli::sendWsCliTextMsg, m_ws, &WsCli::sendWsCliTextMsg);
+    const QPointer<WebRtcCli> destroyGuard(rtcCli);
     connect(rtcCli, &WebRtcCli::destroyCli,
-            this, &HeadlessController::onDestroyWebRtcCli);
+            this,
+            [this, destroyGuard]() {
+                if (destroyGuard)
+                    destroyWebRtcCli(destroyGuard.data());
+            },
+            Qt::QueuedConnection);
 
     connect(rtcCli, &WebRtcCli::shutdownFinished, rtcCliThread, &QThread::quit, Qt::DirectConnection);
     rtcCli->moveToThread(rtcCliThread);
@@ -205,10 +289,64 @@ void HeadlessController::destroyWebRtcCli(WebRtcCli *webrtcCli)
     const auto sessionIt = m_rtcCliSessions.find(webrtcCli);
     if (sessionIt == m_rtcCliSessions.end())
         return;
+    if (m_rtcCliShutdownPending.contains(webrtcCli))
+        return;
 
     QThread *rtcCliThread = sessionIt.value();
-    m_rtcCliSessions.erase(sessionIt);
-    const bool stopped = WebRtcCliSessionShutdown::shutdown(webrtcCli, rtcCliThread);
-    if (stopped && rtcCliThread)
-        delete rtcCliThread;
+    if (m_ws)
+        QObject::disconnect(m_ws, nullptr, webrtcCli, nullptr);
+    webrtcCli->requestShutdown();
+    m_rtcCliShutdownPending.insert(webrtcCli);
+
+    if (!rtcCliThread)
+    {
+        m_rtcCliShutdownPending.remove(webrtcCli);
+        m_rtcCliSessions.erase(sessionIt);
+        delete webrtcCli;
+        return;
+    }
+
+    // QThread::finished may have been emitted before the queued destroy
+    // callback reaches the owner thread. Handle that terminal state directly
+    // instead of waiting for a signal that can no longer arrive.
+    if (!rtcCliThread->isRunning())
+    {
+        const bool stopped = WebRtcCliSessionShutdown::shutdown(webrtcCli, rtcCliThread);
+        m_rtcCliShutdownPending.remove(webrtcCli);
+        m_rtcCliSessions.erase(sessionIt);
+        if (stopped)
+            delete rtcCliThread;
+        return;
+    }
+
+    const QPointer<WebRtcCli> guard(webrtcCli);
+    QThread *const ownerThread = thread();
+    const QMetaObject::Connection affinityRecovery = QObject::connect(
+        rtcCliThread,
+        &QThread::finished,
+        rtcCliThread,
+        [guard, ownerThread]() {
+            if (guard && ownerThread && guard->thread() == QThread::currentThread())
+                guard->moveToThread(ownerThread);
+        },
+        Qt::DirectConnection);
+    QObject::connect(rtcCliThread, &QThread::finished, this,
+                     [this, webrtcCli, guard, rtcCliThread, affinityRecovery]() {
+                         QObject::disconnect(affinityRecovery);
+                         if (m_rtcCliSessions.value(webrtcCli) == rtcCliThread)
+                             m_rtcCliSessions.remove(webrtcCli);
+                         m_rtcCliShutdownPending.remove(webrtcCli);
+                         if (guard)
+                             guard->deleteLater();
+                         rtcCliThread->deleteLater();
+                     },
+                     Qt::QueuedConnection);
+    if (!QMetaObject::invokeMethod(webrtcCli,
+                                   "shutdownAndMoveToOwnerThread",
+                                   Qt::QueuedConnection,
+                                   Q_ARG(QObject *, this)))
+    {
+        LOG_ERROR("Failed to queue asynchronous headless WebRtcCli shutdown");
+        rtcCliThread->quit();
+    }
 }

@@ -59,9 +59,19 @@ void FileTransferWindow::onSessionHealthChanged(int state, const QString &messag
 {
     if (isClosing())
         return;
-    connected = false;
     if (state == 2)
+    {
+        connected = false;
+        m_pendingFileListRequestId.clear();
+        m_pendingFileListRequestPath.clear();
         failActiveTransfers(message);
+    }
+    else if (state == 0 || state == 1)
+    {
+        // Health transitions do not necessarily recreate the data channel.
+        // Keep the file controls usable while the existing session is alive.
+        connected = true;
+    }
 }
 
 void FileTransferWindow::onRemoteDisconnectRequested(const QString &reason, bool peerWide)

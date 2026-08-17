@@ -65,13 +65,7 @@ void WebRtcCtl::onRemoteTrack(std::shared_ptr<rtc::Track> track)
             if (!weakThis)
                 return;
             frame.timestampUs = static_cast<qint64>(info.timestamp);
-            QMetaObject::invokeMethod(weakThis.data(),
-                                      [weakThis, frame]() mutable {
-                                          if (!weakThis)
-                                              return;
-                                          weakThis->onD3D11VideoFrameReceived(std::move(frame));
-                                      },
-                                      Qt::QueuedConnection);
+            weakThis->enqueueD3D11VideoFrame(frame);
         });
         LOG_INFO("Native D3D11 video rendering enabled on control side");
 #endif
@@ -81,10 +75,8 @@ void WebRtcCtl::onRemoteTrack(std::shared_ptr<rtc::Track> track)
                 return;
             if (!weakThis)
                 return;
-            const QByteArray bytes(reinterpret_cast<const char *>(data.data()), static_cast<int>(data.size()));
-            QMetaObject::invokeMethod(weakThis.data(), "onVideoFrameBytesReceived", Qt::QueuedConnection,
-                                      Q_ARG(QByteArray, bytes),
-                                      Q_ARG(qint64, static_cast<qint64>(info.timestamp)));
+            QByteArray bytes(reinterpret_cast<const char *>(data.data()), static_cast<int>(data.size()));
+            weakThis->enqueueVideoFrameBytes(std::move(bytes), static_cast<qint64>(info.timestamp));
         });
         LOG_INFO("Remote video track callback installed for mid={}", trackMid);
         return;

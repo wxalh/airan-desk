@@ -1,6 +1,8 @@
 ﻿#ifndef WEBRTC_CTL_NETWORK_PATH_UTIL_H
 #define WEBRTC_CTL_NETWORK_PATH_UTIL_H
 
+#include "rtc/core/rtc_media_types.h"
+
 #include <QString>
 #include <QStringList>
 
@@ -11,6 +13,8 @@ QString networkPathFromCandidate(const QString &candidate);
 
 
 QString selectedNetworkPathFromPair(const QString &localCandidate, const QString &remoteCandidate);
+
+QString selectedNetworkPathFromPair(const rtc::SelectedCandidatePair &pair);
 
 
 QStringList orderedNetworkPaths(QStringList paths);

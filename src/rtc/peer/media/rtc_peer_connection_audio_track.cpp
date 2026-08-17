@@ -157,6 +157,12 @@ std::shared_ptr<Track> PeerConnection::addTrack(const Description::Audio &desc)
         });
     }
 
+    if (m_closed.load() || !m_pc || !m_factory)
+    {
+        LOG_WARN("Ignoring audio track request because PeerConnection is closed or unavailable");
+        return nullptr;
+    }
+
     std::vector<std::string> streamIds{desc.name()};
 
     if (desc.direction() == Description::Direction::RecvOnly)

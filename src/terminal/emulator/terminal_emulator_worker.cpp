@@ -18,39 +18,36 @@ constexpr int kOutputMaxBytesPerDrain = 32 * 1024;
 constexpr qint64 kOutputBudgetMs = 4;
 constexpr int kSnapshotIntervalMs = 20;
 constexpr int kSnapshotQuietPeriodMs = 4;
+constexpr int kMaxOsc7PendingBytes = 4096;
+constexpr qint64 kPromptEchoFilterTimeoutMs = 2000;
 constexpr int kScrollbackPages = 10;
 constexpr qint64 kMaxScrollbackBytes = 32LL * 1024 * 1024;
 
 QString pathFromOsc7Payload(const QByteArray &payload)
 {
     const QString text = QString::fromUtf8(payload);
-    const QUrl url(text);
-    if (url.scheme() == QStringLiteral("file"))
-    {
-        QString path;
-        const QString host = url.host().toLower();
-        if (host.isEmpty() || host == QStringLiteral("localhost"))
-            path = QUrl::fromPercentEncoding(url.path().toUtf8());
-        else
-            path = url.toLocalFile();
+    if (!text.startsWith(QStringLiteral("file://"), Qt::CaseInsensitive))
+        return QString();
 
-        if (!path.isEmpty())
-        {
-            if (path.size() >= 3 && path.at(0) == QLatin1Char('/') && path.at(2) == QLatin1Char(':'))
-                path.remove(0, 1);
-            return QDir::fromNativeSeparators(path);
-        }
-    }
+    const QString remainder = text.mid(7);
+    const int slash = remainder.indexOf(QLatin1Char('/'));
+    if (slash < 0)
+        return QString();
 
-    const QString prefix = QStringLiteral("file:///");
-    if (text.startsWith(prefix, Qt::CaseInsensitive))
-    {
-        QString path = QUrl::fromPercentEncoding(text.mid(prefix.size()).toUtf8());
-        if (path.size() >= 2 && path.at(1) == QLatin1Char(':'))
-            return QDir::fromNativeSeparators(path);
-        return QDir::fromNativeSeparators(QStringLiteral("/") + path);
-    }
-    return QString();
+    const QString host = remainder.left(slash);
+    const QString rawPath = remainder.mid(slash);
+    QString path = host.isEmpty()
+                       ? rawPath
+                       : QUrl::fromPercentEncoding(rawPath.toUtf8());
+    if (!host.isEmpty() && host.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) != 0)
+        path = QStringLiteral("//") + host + path;
+    const bool leadingSlashBeforeUnc = path.size() >= 3 && path.at(0) == QLatin1Char('/') &&
+                                       ((path.at(1) == QLatin1Char('/') && path.at(2) == QLatin1Char('/')) ||
+                                        (path.at(1) == QLatin1Char('\\') && path.at(2) == QLatin1Char('\\')));
+    if (leadingSlashBeforeUnc ||
+        (path.size() >= 3 && path.at(0) == QLatin1Char('/') && path.at(2) == QLatin1Char(':')))
+        path.remove(0, 1);
+    return QDir::fromNativeSeparators(path);
 }
 }
 
@@ -123,6 +120,7 @@ void TerminalEmulatorWorker::initializeTerminal(int cols, int rows)
 
     m_scrollback.clear();
     m_scrollbackSequence = 0;
+    m_osc7Pending.clear();
     m_alternateScreen = false;
     vterm_screen_reset(m_screen, 1);
     flushDamage();
@@ -192,12 +190,14 @@ void TerminalEmulatorWorker::processOutput(const QByteArray &data, bool remoteOu
 {
     if (!m_vterm || data.isEmpty())
         return;
+    // Parse OSC 7 from the raw stream before prompt-setup echo filtering can
+    // remove the command line that carried the directory marker.
+    parseOsc7Directory(data);
     const QByteArray output = remoteOutput
                                   ? normalizePipeTerminalOutput(filterTerminalOutput(data))
                                   : data;
     if (output.isEmpty())
         return;
-    parseOsc7Directory(output);
     vterm_input_write(m_vterm, output.constData(), static_cast<size_t>(output.size()));
     flushDamage();
     m_snapshotDirty = true;
@@ -235,8 +235,11 @@ void TerminalEmulatorWorker::setPipeMode(bool enabled)
 void TerminalEmulatorWorker::setPromptEchoFiltering(bool enabled)
 {
     m_filterPromptEcho = enabled;
-    if (!enabled)
-        m_terminalFilterPending.clear();
+    m_terminalFilterPending.clear();
+    if (enabled)
+        m_promptEchoFilterTimer.start();
+    else
+        m_promptEchoFilterTimer.invalidate();
 }
 
 void TerminalEmulatorWorker::sendKey(int key, int modifiers)
@@ -389,6 +392,17 @@ QByteArray TerminalEmulatorWorker::filterTerminalOutput(const QByteArray &data)
 {
     if (data.isEmpty())
         return data;
+    if (m_filterPromptEcho && m_promptEchoFilterTimer.isValid() &&
+        m_promptEchoFilterTimer.elapsed() >= kPromptEchoFilterTimeoutMs)
+    {
+        m_filterPromptEcho = false;
+        m_promptEchoFilterTimer.invalidate();
+        const QByteArray output = m_terminalFilterPending + data;
+        m_terminalFilterPending.clear();
+        return output;
+    }
+    if (!m_filterPromptEcho && m_terminalFilterPending.isEmpty())
+        return data;
 
     QByteArray output = m_terminalFilterPending + data;
     m_terminalFilterPending.clear();
@@ -430,17 +444,41 @@ QByteArray TerminalEmulatorWorker::filterTerminalOutput(const QByteArray &data)
             ++removeEnd;
         output.remove(lineStart, removeEnd - lineStart);
         m_filterPromptEcho = false;
+        m_promptEchoFilterTimer.invalidate();
     }
 
     if (m_filterPromptEcho)
     {
-        constexpr int kMarkerLookbehindBytes = 96;
-        const int keepBytes = qMin(output.size(), kMarkerLookbehindBytes);
-        const QByteArray tail = output.right(keepBytes);
-        if (tail.contains("prompt ") || tail.contains("$E]7;") || tail.contains("function global"))
+        int partialMarkerBytes = 0;
+        for (const QByteArray &candidate : markers)
         {
-            m_terminalFilterPending = tail;
-            output.chop(keepBytes);
+            for (int length = qMin(output.size(), candidate.size() - 1);
+                 length > partialMarkerBytes;
+                 --length)
+            {
+                if (output.endsWith(candidate.left(length)))
+                {
+                    partialMarkerBytes = length;
+                    break;
+                }
+            }
+        }
+
+        if (partialMarkerBytes > 0)
+        {
+            m_terminalFilterPending = output.right(partialMarkerBytes);
+            output.chop(partialMarkerBytes);
+        }
+        else
+        {
+            constexpr int kMarkerLookbehindBytes = 96;
+            const int keepBytes = qMin(output.size(), kMarkerLookbehindBytes);
+            const QByteArray tail = output.right(keepBytes);
+            if (tail.contains("prompt ") || tail.contains("$E]7;") || tail.contains("function global"))
+            {
+                m_terminalFilterPending = tail;
+                output.chop(keepBytes);
+            }
         }
     }
     return output;
@@ -581,24 +619,45 @@ void TerminalEmulatorWorker::flushDamage()
 
 void TerminalEmulatorWorker::parseOsc7Directory(const QByteArray &data)
 {
+    if (data.isEmpty())
+        return;
+
+    const QByteArray prefix = QByteArrayLiteral("\x1b]7;");
+    const QByteArray input = m_osc7Pending + data;
+    m_osc7Pending.clear();
+
     int pos = 0;
-    while ((pos = data.indexOf("\x1b]7;", pos)) >= 0)
+    while ((pos = input.indexOf(prefix, pos)) >= 0)
     {
         const int start = pos + 4;
-        int end = data.indexOf('\x07', start);
+        int end = input.indexOf('\x07', start);
         int terminatorLength = 1;
-        const int stEnd = data.indexOf("\x1b\\", start);
+        const int stEnd = input.indexOf("\x1b\\", start);
         if (end < 0 || (stEnd >= 0 && stEnd < end))
         {
             end = stEnd;
             terminatorLength = 2;
         }
         if (end < 0)
+        {
+            const QByteArray pending = input.mid(pos);
+            if (pending.size() <= kMaxOsc7PendingBytes)
+                m_osc7Pending = pending;
             return;
-        const QString path = pathFromOsc7Payload(data.mid(start, end - start));
+        }
+        const QString path = pathFromOsc7Payload(input.mid(start, end - start));
         if (!path.isEmpty())
             emit currentDirectoryChanged(path);
         pos = end + terminatorLength;
+    }
+
+    for (int length = prefix.size() - 1; length > 0; --length)
+    {
+        if (input.endsWith(prefix.left(length)))
+        {
+            m_osc7Pending = input.right(qMin(length, kMaxOsc7PendingBytes));
+            break;
+        }
     }
 }
 
@@ -612,6 +671,8 @@ void TerminalEmulatorWorker::shutdown()
     m_snapshotBurstActive = false;
     m_pendingOutput.clear();
     m_terminalFilterPending.clear();
+    m_promptEchoFilterTimer.invalidate();
+    m_osc7Pending.clear();
     m_scrollback.clear();
     if (m_vterm)
     {
@@ -693,6 +754,8 @@ int TerminalEmulatorWorker::scrollbackPushCallback(int cols, const VTermScreenCe
 {
     auto *worker = static_cast<TerminalEmulatorWorker *>(user);
     if (!worker || cols <= 0 || !cells)
+        return 1;
+    if (worker->m_alternateScreen)
         return 1;
     QVector<VTermScreenCell> line;
     line.reserve(cols);

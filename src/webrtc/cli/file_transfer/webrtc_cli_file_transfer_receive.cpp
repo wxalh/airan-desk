@@ -33,18 +33,19 @@ void WebRtcCli::sendUploadResponse(const QString &fileName, bool success, const 
 }
 
 
-void WebRtcCli::handleFileReceived(bool status, const QString &tempPath, const QString &errorMessage)
+void WebRtcCli::handleFileReceived(bool status, const QString &tempPath,
+                                   const QString &errorMessage, const QString &sha256)
 {
     LOG_TRACE("Received complete file from FilePacketUtil, status: {}, tempPath: {}", status, tempPath);
 
     noteClipboardPromisedFileResult(tempPath, status);
-    if (m_auditSession)
+    const QFileInfo info(tempPath);
+    if (m_auditSession && (!status || info.isFile()))
     {
-        const QFileInfo info(tempPath);
         m_auditSession->recordFileTransfer(tempPath,
                                            status && info.exists() ? info.size() : 0,
                                            QStringLiteral("upload"),
-                                           status ? AuditSession::sha256ForFile(tempPath) : QString(),
+                                           status ? sha256 : QString(),
                                            status);
     }
     sendUploadResponse(tempPath,

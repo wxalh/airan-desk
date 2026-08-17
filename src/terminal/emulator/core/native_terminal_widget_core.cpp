@@ -13,9 +13,7 @@ void NativeTerminalWidget::timerEvent(QTimerEvent *event)
     if (event->timerId() == m_blinkTimer.timerId())
     {
         m_cursorBlinkState = !m_cursorBlinkState;
-        const QRect cursorRect(m_cursorPos.col * m_cellWidth, m_cursorPos.row * m_cellHeight,
-                               m_cellWidth, m_cellHeight);
-        update(cursorRect);
+        update(cursorPaintRect());
         return;
     }
     if (event->timerId() == m_selectionScrollTimer.timerId())

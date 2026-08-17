@@ -24,8 +24,6 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
         return false;
     }
 
-    const QString checksum = m_auditSession ? AuditSession::sha256ForFile(cliPath) : QString();
-
     const QString absCtlPath = QDir::cleanPath(ctlPath);
 
     QJsonObject header = JsonUtil::createObject()
@@ -64,10 +62,14 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
                                      cliPath);
             };
             const auto cancelCallback = [this, transferId]() {
-                return isTransferCancelled(transferId);
+                return m_shutdownRequested.load() || m_shutdownStarted.load() ||
+                       isTransferCancelled(transferId);
             };
 
-            if (FilePacketUtil::sendFileStream(cliPath, header, m_fileChannel, progressCallback, cancelCallback))
+            QString checksum;
+            if (FilePacketUtil::sendFileStream(cliPath, header, m_fileChannel,
+                                               progressCallback, cancelCallback,
+                                               m_auditSession ? &checksum : nullptr))
             {
                 LOG_INFO("Sent file stream: {} -> {} ({})",
                          cliPath, absCtlPath, ConvertUtil::formatFileSize(fileInfo.size()));
@@ -80,7 +82,7 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
             if (!isTransferCancelled(transferId))
                 sendFileErrorResponse(cliPath, "Failed to send file stream");
             if (m_auditSession)
-                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), checksum, false);
+                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), QString(), false);
             return false;
         }
         catch (const std::exception &e)
@@ -89,7 +91,7 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
             if (!isTransferCancelled(transferId))
                 sendFileErrorResponse(cliPath, "Exception during file stream send");
             if (m_auditSession)
-                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), checksum, false);
+                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), QString(), false);
             return false;
         }
         catch (...)
@@ -98,7 +100,7 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
             if (!isTransferCancelled(transferId))
                 sendFileErrorResponse(cliPath, "Exception during file stream send");
             if (m_auditSession)
-                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), checksum, false);
+                m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), QString(), false);
             return false;
         }
     }
@@ -106,6 +108,6 @@ bool WebRtcCli::sendSingleFile(const QString &cliPath, const QString &ctlPath, c
     LOG_ERROR("File channel not available for sending file");
     sendFileErrorResponse(cliPath, "File channel not available");
     if (m_auditSession)
-        m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), checksum, false);
+        m_auditSession->recordFileTransfer(cliPath, fileInfo.size(), QStringLiteral("download"), QString(), false);
     return false;
 }

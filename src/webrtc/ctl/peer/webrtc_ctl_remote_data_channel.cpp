@@ -51,34 +51,58 @@ void WebRtcCtl::onRemoteDataChannel(std::shared_ptr<rtc::DataChannel> channel)
     LOG_INFO("Control side received data channel: {}", channelLabel);
     emit connectionStatusChanged(tr("Data channel created: %1").arg(channelLabelText(channelLabel, this)));
 
+    const auto replaceChannel = [&channel](std::shared_ptr<rtc::DataChannel> &slot) {
+        if (slot && slot != channel)
+        {
+            try
+            {
+                // A renegotiation can recreate a channel with the same label.
+                // Detach the old callbacks before closing it so its late close
+                // event cannot be mistaken for the replacement channel.
+                slot->resetCallbacks();
+                slot->close();
+            }
+            catch (...)
+            {
+            }
+        }
+        slot = channel;
+    };
+
     if (channelLabel == Constant::TYPE_FILE)
     {
-        m_fileChannel = channel;
+        replaceChannel(m_fileChannel);
         setupFileChannelCallbacks();
     }
     else if (channelLabel == Constant::TYPE_FILE_TEXT)
     {
-        m_fileTextChannel = channel;
+        replaceChannel(m_fileTextChannel);
         setupFileTextChannelCallbacks();
     }
     else if (channelLabel == Constant::TYPE_INPUT)
     {
-        m_inputChannel = channel;
+        replaceChannel(m_inputChannel);
         setupInputChannelCallbacks();
     }
     else if (channelLabel == Constant::TYPE_INPUT_MOVE)
     {
-        m_inputMoveChannel = channel;
+        replaceChannel(m_inputMoveChannel);
         setupInputMoveChannelCallbacks();
     }
     else if (channelLabel == Constant::TYPE_CLIPBOARD)
     {
-        m_clipboardChannel = channel;
+        replaceChannel(m_clipboardChannel);
         setupClipboardChannelCallbacks();
     }
     else if (channelLabel == Constant::TYPE_SESSION_HEARTBEAT)
     {
-        m_heartbeatChannel = channel;
+        replaceChannel(m_heartbeatChannel);
         setupHeartbeatChannelCallbacks();
+    }
+    else
+    {
+        LOG_WARN("Closing unsupported remote data channel: {}", channelLabel);
+        channel->resetCallbacks();
+        channel->close();
     }
 }

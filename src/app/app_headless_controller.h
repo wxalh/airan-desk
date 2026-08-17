@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QThread>
 
@@ -35,7 +36,7 @@ private:
     void startAuthorizedIncomingSession(const QString &sender,
                                         const QJsonObject &object,
                                         const ControlledAccessDecision &decision);
-    void sendIncomingConnectError(const QString &sender, const QString &reason);
+    void sendIncomingConnectError(const QString &sender, const QString &reason, const QString &sessionId);
     void destroyWebRtcCli(WebRtcCli *webrtcCli);
 
 private slots:
@@ -54,6 +55,7 @@ private:
     WsCli *m_ws{nullptr};
     QThread *m_wsThread{nullptr};
     QHash<WebRtcCli *, QThread *> m_rtcCliSessions;
+    QSet<WebRtcCli *> m_rtcCliShutdownPending;
     bool m_shuttingDown{false};
 };
 

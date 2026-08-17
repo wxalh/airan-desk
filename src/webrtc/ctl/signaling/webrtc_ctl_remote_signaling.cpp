@@ -23,12 +23,23 @@ void WebRtcCtl::handleSignalingError(const QJsonObject &object)
     QString data = JsonUtil::getString(object, Constant::KEY_DATA);
     if (data.isEmpty())
         data = JsonUtil::getString(object, Constant::KEY_ERROR);
+    const QString trimmedData = data.trimmed();
     const QString reason = (data == Constant::ERROR_PASSWORD_INCORRECT)
                                ? tr("Incorrect password")
                                : data.trimmed();
     emit connectionStatusChanged(tr("Connection failed: %1")
                                      .arg(reason.isEmpty() ? tr("Unknown reason") : reason));
     LOG_ERROR("Peer signaling error: {}", data);
+
+    // Authentication and controlled-access errors are terminal for this
+    // request. Other TYPE_ERROR messages originate from the controlled
+    // WebRTC setup path; rebuild the peer immediately instead of waiting for
+    // the startup timer to expire with a dead remote session.
+    const bool accessFailure = trimmedData == Constant::ERROR_PASSWORD_INCORRECT ||
+                               trimmedData == Constant::ERROR_CONTROLLED_ACCESS_DISABLED ||
+                               trimmedData == Constant::ERROR_CONTROLLED_ACCESS_UNAVAILABLE;
+    if (!accessFailure)
+        requestSessionReconnect(tr("Remote WebRTC startup failed, reconnecting..."));
 }
 
 /*
@@ -40,6 +51,15 @@ void WebRtcCtl::handleRemoteDescriptionMessage(const QJsonObject &object, const 
     if (data.isEmpty() || data.size() > kMaxSdpChars)
     {
         LOG_WARN("Rejected invalid remote description size: {}", data.size());
+        return;
+    }
+
+    if (m_remoteDescriptionInFlight)
+    {
+        m_pendingRemoteDescriptionData = data;
+        m_pendingRemoteDescriptionType = type;
+        m_pendingRemoteDescriptionObject = object;
+        LOG_WARN("Remote description already in flight; retaining latest {}", type);
         return;
     }
 
@@ -56,6 +76,7 @@ void WebRtcCtl::handleRemoteDescriptionMessage(const QJsonObject &object, const 
         LOG_DEBUG("Setting remote description: {}", type);
         emit connectionStatusChanged(tr("Received remote %1").arg(type));
         rtc::Description desc(data.toStdString(), type.toStdString());
+        m_remoteDescriptionInFlight = true;
         const bool shouldAnswer = (type == Constant::TYPE_OFFER);
         const QPointer<WebRtcCtl> guard(this);
         const auto callbackLifetime = m_callbackLifetime;
@@ -70,14 +91,30 @@ void WebRtcCtl::handleRemoteDescriptionMessage(const QJsonObject &object, const 
                 guard->m_callbackDispatcher->post([guard, type, shouldAnswer]() {
                     if (!guard || guard->m_shutdownStarted.load() || !guard->m_peerConnection)
                         return;
+                    guard->m_remoteDescriptionInFlight = false;
                     guard->m_remoteDescriptionSet = true;
-                    guard->flushPendingRemoteCandidates();
                     if (shouldAnswer)
                         guard->m_peerConnection->createAnswer();
                     emit guard->connectionStatusChanged(shouldAnswer
                                                             ? QCoreApplication::translate("WebRtcCtl", "Remote description set, creating answer")
                                                             : QCoreApplication::translate("WebRtcCtl", "Remote description set, continuing ICE negotiation"));
                     LOG_DEBUG("Remote description set successfully: {}", type);
+                    if (!guard->m_pendingRemoteDescriptionType.isEmpty())
+                    {
+                        const QString pendingData = std::move(guard->m_pendingRemoteDescriptionData);
+                        const QString pendingType = std::move(guard->m_pendingRemoteDescriptionType);
+                        QJsonObject pendingObject = std::move(guard->m_pendingRemoteDescriptionObject);
+                        guard->m_pendingRemoteDescriptionData.clear();
+                        guard->m_pendingRemoteDescriptionType.clear();
+                        guard->m_pendingRemoteDescriptionObject = QJsonObject();
+                        if (pendingObject.isEmpty())
+                            pendingObject.insert(Constant::KEY_DATA, pendingData);
+                        guard->handleRemoteDescriptionMessage(pendingObject, pendingType);
+                    }
+                    else
+                    {
+                        guard->flushPendingRemoteCandidates();
+                    }
                 });
             },
             [guard, callbackLifetime, type](const std::string &error) {
@@ -90,19 +127,44 @@ void WebRtcCtl::handleRemoteDescriptionMessage(const QJsonObject &object, const 
                 guard->m_callbackDispatcher->post([guard, type, errorText]() {
                     if (!guard || guard->m_shutdownStarted.load())
                         return;
+                    guard->m_remoteDescriptionInFlight = false;
                     emit guard->connectionStatusChanged(
                         QCoreApplication::translate("WebRtcCtl", "Remote description set failed: %1").arg(errorText));
                     LOG_ERROR("Remote description set failed: {}, error={}", type, errorText);
+                    if (!guard->m_pendingRemoteDescriptionType.isEmpty())
+                    {
+                        const QString pendingData = std::move(guard->m_pendingRemoteDescriptionData);
+                        const QString pendingType = std::move(guard->m_pendingRemoteDescriptionType);
+                        QJsonObject pendingObject = std::move(guard->m_pendingRemoteDescriptionObject);
+                        guard->m_pendingRemoteDescriptionData.clear();
+                        guard->m_pendingRemoteDescriptionType.clear();
+                        guard->m_pendingRemoteDescriptionObject = QJsonObject();
+                        if (pendingObject.isEmpty())
+                            pendingObject.insert(Constant::KEY_DATA, pendingData);
+                        guard->handleRemoteDescriptionMessage(pendingObject, pendingType);
+                    }
+                    else
+                    {
+                        guard->m_pendingRemoteCandidates.clear();
+                        guard->requestSessionReconnect(
+                            QCoreApplication::translate("WebRtcCtl", "Remote description failed, reconnecting..."));
+                    }
                 });
             });
     }
     catch (const std::exception &e)
     {
+        m_remoteDescriptionInFlight = false;
         LOG_ERROR("Failed to set remote description: {}", e.what());
+        m_pendingRemoteCandidates.clear();
+        requestSessionReconnect(tr("Remote description failed, reconnecting..."));
     }
     catch (...)
     {
+        m_remoteDescriptionInFlight = false;
         LOG_ERROR("Failed to set remote description: unknown error");
+        m_pendingRemoteCandidates.clear();
+        requestSessionReconnect(tr("Remote description failed, reconnecting..."));
     }
 }
 
@@ -131,14 +193,22 @@ void WebRtcCtl::addRemoteCandidateOrQueue(const QString &candidate, const QStrin
         return;
     }
 
-    if (!m_remoteDescriptionSet)
+    if (!m_remoteDescriptionSet || m_remoteDescriptionInFlight ||
+        !m_pendingRemoteDescriptionType.isEmpty())
     {
-        if (m_pendingRemoteCandidates.size() >= kMaxPendingIceCandidates)
+        const QPair<QString, QString> pendingCandidate = qMakePair(candidate, mid);
+        if (m_pendingRemoteCandidates.contains(pendingCandidate))
         {
-            LOG_WARN("Rejected ICE candidate because the pending queue is full");
+            LOG_TRACE("Ignored duplicate pending ICE candidate");
             return;
         }
-        m_pendingRemoteCandidates.append(qMakePair(candidate, mid));
+        if (m_pendingRemoteCandidates.size() >= kMaxPendingIceCandidates)
+        {
+            LOG_ERROR("ICE candidate queue is full, reconnecting instead of dropping signaling data");
+            requestSessionReconnect(tr("ICE candidate queue is full, reconnecting..."));
+            return;
+        }
+        m_pendingRemoteCandidates.append(pendingCandidate);
         LOG_DEBUG("Queued remote ICE candidate until remote description is set, pending={}", m_pendingRemoteCandidates.size());
         return;
     }

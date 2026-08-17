@@ -6,50 +6,312 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QDirIterator>
+#include <QCoreApplication>
+#include <QPointer>
+#include <QRunnable>
+#include <QThreadPool>
 #include <QStorageInfo>
 
+#include <algorithm>
 
-void WebRtcCli::populateLocalFiles()
+namespace
 {
-    
+constexpr int kMaxPendingDownloadRequests = 1024;
+constexpr int kMaxPendingFileMutationTasks = 32;
+constexpr int kMaxTransferPathChars = 32 * 1024;
+constexpr int kMaxTransferIdChars = 256;
+constexpr int kMaxFileListEntries = 5000;
+
+struct FileListScanResult
+{
     QJsonArray mountedPaths;
-    QList<QStorageInfo> volumes = QStorageInfo::mountedVolumes();
-    for (const QStorageInfo &volume : volumes)
+    QJsonArray files;
+    QString error;
+};
+
+struct FileMutationResult
+{
+    QString path;
+    QString newPath;
+    QString parentPath;
+    QString error;
+    bool status{false};
+};
+
+FileMutationResult deleteFileMutation(const QString &path)
+{
+    FileMutationResult result;
+    result.path = path;
+    const QFileInfo info(path);
+    result.parentPath = info.absoluteDir().absolutePath();
+    if (!info.exists() && !info.isSymLink())
     {
-        if (volume.isValid() && volume.isReady())
+        result.error = QCoreApplication::translate("WebRtcCli", "Path does not exist.");
+    }
+    else if (info.isDir() && !info.isSymLink())
+    {
+        result.status = QDir(path).removeRecursively();
+        if (!result.status)
+            result.error = QCoreApplication::translate("WebRtcCli", "Failed to remove directory.");
+    }
+    else
+    {
+        result.status = QFile::remove(path);
+        if (!result.status)
+            result.error = QCoreApplication::translate("WebRtcCli", "Failed to remove file.");
+    }
+    return result;
+}
+
+FileMutationResult renameFileMutation(const QString &path, const QString &newPath)
+{
+    FileMutationResult result;
+    result.path = path;
+    result.newPath = newPath;
+    result.parentPath = QFileInfo(newPath).absoluteDir().absolutePath();
+    const QFileInfo info(path);
+    if (!info.exists())
+    {
+        result.error = QCoreApplication::translate("WebRtcCli", "Path does not exist.");
+    }
+    else if (QFileInfo::exists(newPath))
+    {
+        result.error = QCoreApplication::translate("WebRtcCli", "Target already exists.");
+    }
+    else
+    {
+        result.status = QDir().rename(path, newPath);
+        if (!result.status)
+            result.error = QCoreApplication::translate("WebRtcCli", "Failed to rename item.");
+    }
+    return result;
+}
+
+FileMutationResult createFileMutation(const QString &path, bool isDirectory)
+{
+    FileMutationResult result;
+    result.path = path;
+    result.parentPath = QFileInfo(path).absoluteDir().absolutePath();
+    const QFileInfo info(path);
+    if (info.exists() || info.isSymLink())
+    {
+        result.error = QCoreApplication::translate("WebRtcCli", "Target already exists.");
+    }
+    else if (isDirectory)
+    {
+        result.status = QDir().mkpath(path);
+        if (!result.status)
+            result.error = QCoreApplication::translate("WebRtcCli", "Failed to create directory.");
+    }
+    else
+    {
+        QDir parentDir = info.absoluteDir();
+        if (!parentDir.exists() && !parentDir.mkpath(QStringLiteral(".")))
         {
-            mountedPaths.append(volume.rootPath());
+            result.error = QCoreApplication::translate("WebRtcCli", "Failed to create target directory.");
+        }
+        else
+        {
+            QFile file(path);
+            result.status = file.open(QIODevice::WriteOnly);
+            if (result.status)
+                file.close();
+            else
+                result.error = QCoreApplication::translate("WebRtcCli", "Failed to create file.");
         }
     }
+    return result;
+}
 
-    m_currentDir.setFilter(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
-    m_currentDir.setSorting(QDir::Name | QDir::DirsFirst);
-
-    QFileInfoList list = m_currentDir.entryInfoList();
-
-    QJsonArray fileArray;
-    for (const QFileInfo &entry : list)
+FileListScanResult scanFileList(const QString &path)
+{
+    FileListScanResult result;
+    for (const QStorageInfo &volume : QStorageInfo::mountedVolumes())
     {
-        QJsonObject fileObj = JsonUtil::createObject()
-                                  .add(Constant::KEY_NAME, entry.fileName())
-                                  .add(Constant::KEY_IS_DIR, entry.isDir())
-                                  .add(Constant::KEY_FILE_SIZE, static_cast<double>(entry.size()))
-                                  .add(Constant::KEY_FILE_SUFFIX, entry.isFile() ? entry.suffix().toLower() : QString())
-                                  .add(Constant::KEY_FILE_EXECUTABLE, entry.isFile() && entry.isExecutable())
-                                  .add(Constant::KEY_FILE_LAST_MOD_TIME, entry.lastModified().toString(Qt::ISODate))
-                                  .build();
-        fileArray.append(fileObj);
+        if (volume.isValid() && volume.isReady())
+            result.mountedPaths.append(volume.rootPath());
     }
 
-    QJsonObject responseMsg = JsonUtil::createObject()
-                                  .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
-                                  .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_LIST)
-                                  .add(Constant::KEY_PATH, m_currentDir.absolutePath())
-                                  .add(Constant::KEY_FOLDER_FILES, fileArray)
-                                  .add(Constant::KEY_FOLDER_MOUNTED, mountedPaths)
-                                  .build();
+    const QFileInfo directoryInfo(path);
+    if (!directoryInfo.exists() || !directoryInfo.isDir() || !directoryInfo.isReadable())
+    {
+        result.error = QCoreApplication::translate(
+            "WebRtcCli", "Remote directory is unavailable or not readable.");
+        return result;
+    }
 
-    sendFileTextChannelMessage(responseMsg);
+    QFileInfoList entries;
+    QDirIterator iterator(path,
+                          QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
+                          QDirIterator::NoIteratorFlags);
+    while (iterator.hasNext())
+    {
+        if (entries.size() >= kMaxFileListEntries)
+        {
+            result.error = QCoreApplication::translate(
+                "WebRtcCli", "Directory contains too many entries to display safely.");
+            return result;
+        }
+        entries.append(QFileInfo(iterator.next()));
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const QFileInfo &left, const QFileInfo &right) {
+        if (left.isDir() != right.isDir())
+            return left.isDir();
+        return QString::compare(left.fileName(), right.fileName(), Qt::CaseInsensitive) < 0;
+    });
+    for (const QFileInfo &entry : entries)
+    {
+        result.files.append(JsonUtil::createObject()
+                                .add(Constant::KEY_NAME, entry.fileName())
+                                .add(Constant::KEY_IS_DIR, entry.isDir())
+                                .add(Constant::KEY_FILE_SIZE, static_cast<double>(entry.size()))
+                                .add(Constant::KEY_FILE_SUFFIX, entry.isFile() ? entry.suffix().toLower() : QString())
+                                .add(Constant::KEY_FILE_EXECUTABLE, entry.isFile() && entry.isExecutable())
+                                .add(Constant::KEY_FILE_LAST_MOD_TIME, entry.lastModified().toString(Qt::ISODate))
+                                .build());
+    }
+    return result;
+}
+
+class FileListTask final : public QRunnable
+{
+public:
+    FileListTask(QString path, QPointer<QtCallbackDispatcher> dispatcher,
+                 std::shared_ptr<CallbackLifetime> callbackLifetime,
+                 std::function<void(FileListScanResult)> completion)
+        : m_path(std::move(path)),
+          m_dispatcher(std::move(dispatcher)),
+          m_callbackLifetime(std::move(callbackLifetime)),
+          m_completion(std::move(completion))
+    {
+        setAutoDelete(true);
+    }
+
+    void run() override
+    {
+        const FileListScanResult result = scanFileList(m_path);
+        auto permit = m_callbackLifetime->tryEnter();
+        if (!permit || !m_dispatcher || !m_completion)
+            return;
+        m_dispatcher->post([completion = std::move(m_completion), result]() mutable {
+            completion(result);
+        });
+    }
+
+private:
+    QString m_path;
+    QPointer<QtCallbackDispatcher> m_dispatcher;
+    std::shared_ptr<CallbackLifetime> m_callbackLifetime;
+    std::function<void(FileListScanResult)> m_completion;
+};
+
+class FileMutationTask final : public QRunnable
+{
+public:
+    using Operation = std::function<FileMutationResult()>;
+    using Completion = std::function<void(const FileMutationResult &)>;
+
+    FileMutationTask(QPointer<QtCallbackDispatcher> dispatcher,
+                     std::shared_ptr<CallbackLifetime> callbackLifetime,
+                     Operation operation,
+                     Completion completion)
+        : m_dispatcher(std::move(dispatcher)),
+          m_callbackLifetime(std::move(callbackLifetime)),
+          m_operation(std::move(operation)),
+          m_completion(std::move(completion))
+    {
+        setAutoDelete(true);
+    }
+
+    void run() override
+    {
+        FileMutationResult result;
+        try
+        {
+            result = m_operation ? m_operation() : FileMutationResult();
+        }
+        catch (const std::exception &error)
+        {
+            result.error = QString::fromLocal8Bit(error.what());
+        }
+        catch (...)
+        {
+            result.error = QStringLiteral("File operation failed.");
+        }
+
+        auto permit = m_callbackLifetime->tryEnter();
+        if (!permit || !m_dispatcher || !m_completion)
+            return;
+        m_dispatcher->post([completion = std::move(m_completion),
+                            callbackLifetime = m_callbackLifetime,
+                            result]() mutable {
+            auto callbackPermit = callbackLifetime->tryEnter();
+            if (callbackPermit && completion)
+                completion(result);
+        });
+    }
+
+private:
+    QPointer<QtCallbackDispatcher> m_dispatcher;
+    std::shared_ptr<CallbackLifetime> m_callbackLifetime;
+    Operation m_operation;
+    Completion m_completion;
+};
+}
+
+
+void WebRtcCli::populateLocalFiles(const QString &requestId)
+{
+    const QString path = m_currentDir.absolutePath();
+    const quint64 requestGeneration = ++m_fileListGeneration;
+    if (m_fileListScanRunning)
+    {
+        m_fileListScanPending = true;
+        // A background refresh must not erase a newer explicit request from
+        // the controller. Keep the queued request ID unless this call carries
+        // a real request ID itself.
+        if (!requestId.isEmpty() || m_pendingFileListRequestId.isEmpty())
+            m_pendingFileListRequestId = requestId;
+        return;
+    }
+    m_fileListScanRunning = true;
+    const QPointer<WebRtcCli> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    const QPointer<QtCallbackDispatcher> dispatcher(m_callbackDispatcher);
+    const auto completion = [guard, callbackLifetime, path, requestId, requestGeneration](FileListScanResult result) mutable {
+        auto permit = callbackLifetime->tryEnter();
+        if (!permit || !guard)
+            return;
+        guard->m_fileListScanRunning = false;
+        const bool stale = requestGeneration != guard->m_fileListGeneration;
+        if (!stale)
+        {
+            QJsonObject responseMsg = JsonUtil::createObject()
+                                          .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                          .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_LIST)
+                                          .add(Constant::KEY_PATH, path)
+                                          .add(Constant::KEY_STATUS, result.error.isEmpty())
+                                          .add(Constant::KEY_ERROR, result.error)
+                                          .add(Constant::KEY_FOLDER_MOUNTED, result.mountedPaths)
+                                          .build();
+            if (result.error.isEmpty())
+                responseMsg.insert(Constant::KEY_FOLDER_FILES, result.files);
+            if (!requestId.isEmpty())
+                responseMsg.insert(Constant::KEY_REQUEST_ID, requestId);
+            guard->sendFileTextChannelMessage(responseMsg);
+        }
+        if (guard->m_fileListScanPending)
+        {
+            const QString nextRequestId = guard->m_pendingFileListRequestId;
+            guard->m_fileListScanPending = false;
+            guard->m_pendingFileListRequestId.clear();
+            guard->populateLocalFiles(nextRequestId);
+        }
+    };
+    QThreadPool::globalInstance()->start(
+        new FileListTask(path, dispatcher, callbackLifetime, completion));
 }
 
 
@@ -123,6 +385,7 @@ void WebRtcCli::parseFileMsg(const QJsonObject &object)
 void WebRtcCli::handleFileListRequest(const QJsonObject &object)
 {
     QString path = JsonUtil::getString(object, Constant::KEY_PATH);
+    const QString requestId = JsonUtil::getString(object, Constant::KEY_REQUEST_ID);
     LOG_INFO("Processing file list request for path: {}", path);
     if (path.isEmpty())
     {
@@ -134,7 +397,7 @@ void WebRtcCli::handleFileListRequest(const QJsonObject &object)
     else
         m_currentDir.setPath(path);
 
-    populateLocalFiles();
+    populateLocalFiles(requestId);
 }
 
 
@@ -148,6 +411,16 @@ void WebRtcCli::handleFileDownloadRequest(const QJsonObject &object)
         LOG_ERROR("parseFileMsg: Missing file paths for download request");
         return;
     }
+    if (cliPath.size() > kMaxTransferPathChars || ctlPath.size() > kMaxTransferPathChars ||
+        transferId.size() > kMaxTransferIdChars ||
+        m_pendingDownloads.size() >= kMaxPendingDownloadRequests)
+    {
+        LOG_ERROR("Rejected download request because the pending queue or fields exceed limits: queued={}, cliChars={}, ctlChars={}, transferIdChars={}",
+                  m_pendingDownloads.size(), cliPath.size(), ctlPath.size(), transferId.size());
+        m_disconnectReason = QStringLiteral("download_queue_overflow");
+        emit destroyCli();
+        return;
+    }
     m_pendingDownloads.enqueue({cliPath, ctlPath, transferId});
     processDownloadQueue();
 }
@@ -159,12 +432,26 @@ void WebRtcCli::processDownloadQueue()
         return;
 
     m_downloadQueueActive = true;
-    while (!m_pendingDownloads.isEmpty())
+    processNextDownload();
+}
+
+
+void WebRtcCli::processNextDownload()
+{
+    if (m_shutdownRequested.load())
+    {
+        m_downloadQueueActive = false;
+        return;
+    }
+
+    while (!m_pendingDownloads.isEmpty() && !m_shutdownRequested.load())
     {
         const PendingDownload download = m_pendingDownloads.dequeue();
         if (isTransferCancelled(download.transferId))
             continue;
+
         sendFile(download.cliPath, download.ctlPath, download.transferId);
+        return;
     }
     m_downloadQueueActive = false;
 }
@@ -188,47 +475,45 @@ void WebRtcCli::handleFileDeleteRequest(const QJsonObject &object)
         LOG_WARN("parseFileMsg: Missing path for delete request");
         return;
     }
+    if (m_activeFileMutationTasks >= kMaxPendingFileMutationTasks)
+    {
+        LOG_WARN("Rejecting file delete because the mutation task limit was reached: active={}",
+                 m_activeFileMutationTasks);
+        m_disconnectReason = QStringLiteral("file_mutation_queue_overflow");
+        emit destroyCli();
+        return;
+    }
+    ++m_activeFileMutationTasks;
 
-    QFileInfo info(path);
-    bool ok = false;
-    QString errorMessage;
-    if (!info.exists() && !info.isSymLink())
-    {
-        errorMessage = tr("Path does not exist.");
-    }
-    else if (info.isDir() && !info.isSymLink())
-    {
-        ok = QDir(path).removeRecursively();
-        if (!ok)
-            errorMessage = tr("Failed to remove directory.");
-    }
-    else
-    {
-        ok = QFile::remove(path);
-        if (!ok)
-            errorMessage = tr("Failed to remove file.");
-    }
-
-    QJsonObject response = JsonUtil::createObject()
-                               .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
-                               .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_DELETE)
-                               .add(Constant::KEY_PATH_CLI, path)
-                               .add(Constant::KEY_STATUS, ok)
-                               .add(Constant::KEY_ERROR, errorMessage)
-                               .build();
-    sendFileTextChannelMessage(response);
-    if (m_auditSession)
-        m_auditSession->recordFileOperation(QStringLiteral("delete"), path, ok, errorMessage);
-    LOG_INFO("Remote delete request {}: path={}, error={}",
-             ok ? "succeeded" : "failed", path, errorMessage);
-
-    if (ok)
-    {
-        const QString parentPath = info.absoluteDir().absolutePath();
-        if (!parentPath.isEmpty())
-            m_currentDir.setPath(parentPath);
-        populateLocalFiles();
-    }
+    const QPointer<WebRtcCli> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    const QPointer<QtCallbackDispatcher> dispatcher(m_callbackDispatcher);
+    auto operation = [path]() { return deleteFileMutation(path); };
+    auto completion = [guard](const FileMutationResult &result) {
+        if (!guard)
+            return;
+        guard->m_activeFileMutationTasks = qMax(0, guard->m_activeFileMutationTasks - 1);
+        QJsonObject response = JsonUtil::createObject()
+                                   .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                   .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_DELETE)
+                                   .add(Constant::KEY_PATH_CLI, result.path)
+                                   .add(Constant::KEY_STATUS, result.status)
+                                   .add(Constant::KEY_ERROR, result.error)
+                                   .build();
+        guard->sendFileTextChannelMessage(response);
+        if (guard->m_auditSession)
+            guard->m_auditSession->recordFileOperation(QStringLiteral("delete"), result.path,
+                                                        result.status, result.error);
+        LOG_INFO("Remote delete request {}: path={}, error={}",
+                 result.status ? "succeeded" : "failed", result.path, result.error);
+        if (result.status && !result.parentPath.isEmpty())
+        {
+            guard->m_currentDir.setPath(result.parentPath);
+            guard->populateLocalFiles();
+        }
+    };
+    QThreadPool::globalInstance()->start(
+        new FileMutationTask(dispatcher, callbackLifetime, std::move(operation), std::move(completion)));
 }
 
 
@@ -245,46 +530,48 @@ void WebRtcCli::handleFileRenameRequest(const QJsonObject &object)
         return;
     }
 
-    QFileInfo info(path);
-    const QString newPath = info.dir().absoluteFilePath(newName);
-    bool ok = false;
-    QString errorMessage;
-    if (!info.exists())
+    if (m_activeFileMutationTasks >= kMaxPendingFileMutationTasks)
     {
-        errorMessage = tr("Path does not exist.");
+        LOG_WARN("Rejecting file rename because the mutation task limit was reached: active={}",
+                 m_activeFileMutationTasks);
+        m_disconnectReason = QStringLiteral("file_mutation_queue_overflow");
+        emit destroyCli();
+        return;
     }
-    else if (QFileInfo::exists(newPath))
-    {
-        errorMessage = tr("Target already exists.");
-    }
-    else
-    {
-        ok = QDir().rename(path, newPath);
-        if (!ok)
-            errorMessage = tr("Failed to rename item.");
-    }
+    ++m_activeFileMutationTasks;
 
-    QJsonObject response = JsonUtil::createObject()
-                               .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
-                               .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_RENAME)
-                               .add(Constant::KEY_PATH_CLI, path)
-                               .add(Constant::KEY_PATH, newPath)
-                               .add(Constant::KEY_STATUS, ok)
-                               .add(Constant::KEY_ERROR, errorMessage)
-                               .build();
-    sendFileTextChannelMessage(response);
-    if (m_auditSession)
-        m_auditSession->recordFileOperation(QStringLiteral("rename"), path, ok,
-                                            ok ? QFileInfo(newPath).fileName() : errorMessage);
-    LOG_INFO("Remote rename request {}: {} -> {}", ok ? "succeeded" : "failed", path, newPath);
-
-    if (ok)
-    {
-        const QString parentPath = QFileInfo(newPath).absoluteDir().absolutePath();
-        if (!parentPath.isEmpty())
-            m_currentDir.setPath(parentPath);
-        populateLocalFiles();
-    }
+    const QString newPath = QFileInfo(path).dir().absoluteFilePath(newName);
+    const QPointer<WebRtcCli> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    const QPointer<QtCallbackDispatcher> dispatcher(m_callbackDispatcher);
+    auto operation = [path, newPath]() { return renameFileMutation(path, newPath); };
+    auto completion = [guard](const FileMutationResult &result) {
+        if (!guard)
+            return;
+        guard->m_activeFileMutationTasks = qMax(0, guard->m_activeFileMutationTasks - 1);
+        QJsonObject response = JsonUtil::createObject()
+                                   .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                   .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_RENAME)
+                                   .add(Constant::KEY_PATH_CLI, result.path)
+                                   .add(Constant::KEY_PATH, result.newPath)
+                                   .add(Constant::KEY_STATUS, result.status)
+                                   .add(Constant::KEY_ERROR, result.error)
+                                   .build();
+        guard->sendFileTextChannelMessage(response);
+        if (guard->m_auditSession)
+            guard->m_auditSession->recordFileOperation(
+                QStringLiteral("rename"), result.path, result.status,
+                result.status ? QFileInfo(result.newPath).fileName() : result.error);
+        LOG_INFO("Remote rename request {}: {} -> {}",
+                 result.status ? "succeeded" : "failed", result.path, result.newPath);
+        if (result.status && !result.parentPath.isEmpty())
+        {
+            guard->m_currentDir.setPath(result.parentPath);
+            guard->populateLocalFiles();
+        }
+    };
+    QThreadPool::globalInstance()->start(
+        new FileMutationTask(dispatcher, callbackLifetime, std::move(operation), std::move(completion)));
 }
 
 void WebRtcCli::handleFileCreateRequest(const QJsonObject &object)
@@ -298,54 +585,41 @@ void WebRtcCli::handleFileCreateRequest(const QJsonObject &object)
         return;
     }
 
-    bool ok = false;
-    QString errorMessage;
-    QFileInfo info(path);
-    if (info.exists() || info.isSymLink())
+    if (m_activeFileMutationTasks >= kMaxPendingFileMutationTasks)
     {
-        errorMessage = tr("Target already exists.");
+        LOG_WARN("Rejecting file create because the mutation task limit was reached: active={}",
+                 m_activeFileMutationTasks);
+        m_disconnectReason = QStringLiteral("file_mutation_queue_overflow");
+        emit destroyCli();
+        return;
     }
-    else if (isDirectory)
-    {
-        ok = QDir().mkpath(path);
-        if (!ok)
-            errorMessage = tr("Failed to create directory.");
-    }
-    else
-    {
-        QDir parentDir = info.absoluteDir();
-        if (!parentDir.exists() && !parentDir.mkpath(QStringLiteral(".")))
-        {
-            errorMessage = tr("Failed to create target directory.");
-        }
-        else
-        {
-            QFile file(path);
-            ok = file.open(QIODevice::WriteOnly);
-            if (ok)
-                file.close();
-            else
-                errorMessage = tr("Failed to create file.");
-        }
-    }
+    ++m_activeFileMutationTasks;
 
-    QJsonObject response = JsonUtil::createObject()
-                               .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
-                               .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_CREATE)
-                               .add(Constant::KEY_PATH_CLI, path)
-                               .add(Constant::KEY_IS_DIR, isDirectory)
-                               .add(Constant::KEY_STATUS, ok)
-                               .add(Constant::KEY_ERROR, errorMessage)
-                               .build();
-    sendFileTextChannelMessage(response);
-    LOG_INFO("Remote create request {}: path={}, directory={}, error={}",
-             ok ? "succeeded" : "failed", path, isDirectory, errorMessage);
-
-    if (ok)
-    {
-        const QString parentPath = QFileInfo(path).absoluteDir().absolutePath();
-        if (!parentPath.isEmpty())
-            m_currentDir.setPath(parentPath);
-        populateLocalFiles();
-    }
+    const QPointer<WebRtcCli> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    const QPointer<QtCallbackDispatcher> dispatcher(m_callbackDispatcher);
+    auto operation = [path, isDirectory]() { return createFileMutation(path, isDirectory); };
+    auto completion = [guard, isDirectory](const FileMutationResult &result) {
+        if (!guard)
+            return;
+        guard->m_activeFileMutationTasks = qMax(0, guard->m_activeFileMutationTasks - 1);
+        QJsonObject response = JsonUtil::createObject()
+                                   .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                   .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_CREATE)
+                                   .add(Constant::KEY_PATH_CLI, result.path)
+                                   .add(Constant::KEY_IS_DIR, isDirectory)
+                                   .add(Constant::KEY_STATUS, result.status)
+                                   .add(Constant::KEY_ERROR, result.error)
+                                   .build();
+        guard->sendFileTextChannelMessage(response);
+        LOG_INFO("Remote create request {}: path={}, directory={}, error={}",
+                 result.status ? "succeeded" : "failed", result.path, isDirectory, result.error);
+        if (result.status && !result.parentPath.isEmpty())
+        {
+            guard->m_currentDir.setPath(result.parentPath);
+            guard->populateLocalFiles();
+        }
+    };
+    QThreadPool::globalInstance()->start(
+        new FileMutationTask(dispatcher, callbackLifetime, std::move(operation), std::move(completion)));
 }

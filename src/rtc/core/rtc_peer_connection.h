@@ -74,7 +74,7 @@ public:
     void createAnswer();
     void close();
     void resetCallbacks();
-    bool getSelectedCandidatePair(Candidate *, Candidate *) const { return false; }
+    void querySelectedCandidatePair(std::function<void(bool, SelectedCandidatePair)> cb);
     void queryMediaStats(std::function<void(MediaStats)> cb);
 
     void onStateChange(std::function<void(State)> cb);
@@ -87,10 +87,12 @@ public:
 
 private:
     static webrtc::PeerConnectionInterface::RTCConfiguration toNativeConfiguration(const Configuration &config);
+    void cleanupConstructionFailure();
     std::shared_ptr<Track> wrapRemoteTrack(scoped_refptr<webrtc::MediaStreamTrackInterface> track, const std::string &mid);
     void reapplyVideoCodecPreferences();
     bool remoteAcceptsVideoSimulcast() const;
     void configureAudioRecordingDevice(bool systemLoopback);
+    void pruneClosedDataChannels();
 
     void OnSignalingChange(webrtc::PeerConnectionInterface::SignalingState state) override;
     void OnConnectionChange(webrtc::PeerConnectionInterface::PeerConnectionState state) override;
@@ -107,6 +109,9 @@ private:
     std::unique_ptr<Thread> m_networkThread;
     std::unique_ptr<Thread> m_workerThread;
     std::unique_ptr<Thread> m_signalingThread;
+    bool m_networkThreadStarted{false};
+    bool m_workerThreadStarted{false};
+    bool m_signalingThreadStarted{false};
     scoped_refptr<webrtc::AudioDeviceModule> m_audioDeviceModule;
     scoped_refptr<webrtc::PeerConnectionFactoryInterface> m_factory;
     scoped_refptr<webrtc::PeerConnectionInterface> m_pc;
@@ -118,6 +123,7 @@ private:
     MediaTopology m_mediaTopology{MediaTopology::PeerToPeer};
     bool m_acceptRemoteVideoSimulcast{false};
     std::atomic_bool m_closed{false};
+    bool m_instanceCounted{false};
     mutable std::mutex m_callbackMutex;
     std::function<void(State)> m_onStateChange;
     std::function<void(IceState)> m_onIceStateChange;

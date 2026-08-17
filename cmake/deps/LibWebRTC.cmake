@@ -140,6 +140,13 @@ endfunction()
 
 _airan_select_libwebrtc_target(LIBWEBRTC_PACKAGE_TARGET LIBWEBRTC_PLATFORM LIBWEBRTC_MILESTONE)
 
+if(WIN32)
+    # Downstream dependency selection (notably FFmpeg) must see the resolved
+    # platform even when the user left WEBRTC_WINDOWS_PLATFORM empty.
+    set(WEBRTC_WINDOWS_PLATFORM "${LIBWEBRTC_PLATFORM}" CACHE STRING
+        "Preferred Windows WebRTC package platform: win10 or win7; leave empty for package default" FORCE)
+endif()
+
 if(WIN32 AND LIBWEBRTC_PLATFORM STREQUAL "win7")
     set(LIBWEBRTC_WINDOWS_FAMILY "win7" CACHE STRING "WebRTC Windows package family" FORCE)
 endif()
@@ -151,6 +158,11 @@ if(UNIX AND NOT APPLE)
     set(LIBWEBRTC_LINUX_COMPAT "${WEBRTC_LINUX_COMPAT}" CACHE STRING "WebRTC Linux compatibility package" FORCE)
 endif()
 
+# Keep CMake's package cache aligned when switching between the Win7 and
+# Win10 package roots in an existing build directory.
+set(LibWebRTC_DIR "${WEBRTC_ROOT_DIR}" CACHE PATH
+    "Selected LibWebRTC package directory" FORCE)
+
 find_package(LibWebRTC CONFIG QUIET PATHS "${WEBRTC_ROOT_DIR}" NO_DEFAULT_PATH)
 
 if(NOT TARGET "${LIBWEBRTC_PACKAGE_TARGET}")
@@ -161,6 +173,11 @@ if(NOT TARGET "${LIBWEBRTC_PACKAGE_TARGET}")
 endif()
 
 add_library(libwebrtc INTERFACE)
+set_property(TARGET libwebrtc PROPERTY INTERFACE_INCLUDE_DIRECTORIES "")
+set(LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR
+    "${WEBRTC_ROOT_DIR}/include/m${LIBWEBRTC_MILESTONE}/third_party/perfetto/build_config")
+set(LIBWEBRTC_PERFETTO_ROOT_DIR
+    "${WEBRTC_ROOT_DIR}/include/m${LIBWEBRTC_MILESTONE}/third_party/perfetto")
 set(LIBWEBRTC_DEBUG_PACKAGE_TARGET "${LIBWEBRTC_PACKAGE_TARGET}_debug")
 if(TARGET "${LIBWEBRTC_DEBUG_PACKAGE_TARGET}")
     target_link_libraries(libwebrtc INTERFACE
@@ -170,6 +187,11 @@ if(TARGET "${LIBWEBRTC_DEBUG_PACKAGE_TARGET}")
 else()
     unset(LIBWEBRTC_DEBUG_PACKAGE_TARGET)
     target_link_libraries(libwebrtc INTERFACE "${LIBWEBRTC_PACKAGE_TARGET}")
+endif()
+if(EXISTS "${LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR}/perfetto_build_flags.h")
+    target_include_directories(libwebrtc INTERFACE
+        "${LIBWEBRTC_PERFETTO_ROOT_DIR}"
+        "${LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR}")
 endif()
 
 target_compile_definitions(libwebrtc INTERFACE
@@ -245,12 +267,6 @@ set(LIBWEBRTC_BUILD_ARGS_FILE
     "$<IF:$<CONFIG:Debug>,${LIBWEBRTC_DEBUG_BUILD_ARGS_FILE},${LIBWEBRTC_RELEASE_BUILD_ARGS_FILE}>")
 set(LIBWEBRTC_SOURCE_REVISION_FILE
     "$<IF:$<CONFIG:Debug>,${LIBWEBRTC_DEBUG_SOURCE_REVISION_FILE},${LIBWEBRTC_RELEASE_SOURCE_REVISION_FILE}>")
-set(LIBWEBRTC_PACKAGE_CHECKSUM_FILE
-    "${WEBRTC_ROOT_DIR}/.airan-package-sha256")
-if(NOT EXISTS "${LIBWEBRTC_PACKAGE_CHECKSUM_FILE}")
-    message(FATAL_ERROR
-        "Selected WebRTC package is missing checksum metadata: ${LIBWEBRTC_PACKAGE_CHECKSUM_FILE}")
-endif()
 get_target_property(LIBWEBRTC_THIRD_PARTY_LICENSE_FILE
     "${LIBWEBRTC_PACKAGE_TARGET}" INTERFACE_LIBWEBRTC_LICENSE_FILE)
 get_target_property(LIBWEBRTC_PROJECT_LICENSE_FILE
@@ -295,7 +311,6 @@ message(STATUS "Using Google WebRTC includes: ${LIBWEBRTC_INCLUDE_DIR}")
 message(STATUS "Using Google WebRTC dependency licenses: ${LIBWEBRTC_THIRD_PARTY_LICENSE_FILE}")
 message(STATUS "Using Google WebRTC release build arguments: ${LIBWEBRTC_RELEASE_BUILD_ARGS_FILE}")
 message(STATUS "Using Google WebRTC debug build arguments: ${LIBWEBRTC_DEBUG_BUILD_ARGS_FILE}")
-message(STATUS "Using Google WebRTC package checksum: ${LIBWEBRTC_PACKAGE_CHECKSUM_FILE}")
 if(NOT LIBWEBRTC_RELEASE_SOURCE_REVISION_FILE OR
    NOT LIBWEBRTC_DEBUG_SOURCE_REVISION_FILE)
     message(STATUS "Selected Google WebRTC slice has no exact source revision metadata; release packaging must reject it")

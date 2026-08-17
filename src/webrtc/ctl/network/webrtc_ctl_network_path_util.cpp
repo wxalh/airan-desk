@@ -37,6 +37,44 @@ QString selectedNetworkPathFromPair(const QString &localCandidate, const QString
     return QString();
 }
 
+namespace
+{
+QString networkPathFromCandidateInfo(const rtc::IceCandidateInfo &candidate)
+{
+    const QString type = QString::fromStdString(candidate.candidateType).trimmed().toLower();
+    if (type == QStringLiteral("relay"))
+    {
+        QString protocol = QString::fromStdString(candidate.relayProtocol).trimmed().toLower();
+        if (protocol.isEmpty())
+            protocol = QString::fromStdString(candidate.protocol).trimmed().toLower();
+        return protocol == QStringLiteral("tcp") ? QStringLiteral("turn_tcp")
+                                                 : QStringLiteral("turn_udp");
+    }
+    if (type == QStringLiteral("host") ||
+        type == QStringLiteral("srflx") ||
+        type == QStringLiteral("prflx"))
+    {
+        return QStringLiteral("direct");
+    }
+    return QString();
+}
+} // namespace
+
+
+QString selectedNetworkPathFromPair(const rtc::SelectedCandidatePair &pair)
+{
+    const QString localPath = networkPathFromCandidateInfo(pair.local);
+    const QString remotePath = networkPathFromCandidateInfo(pair.remote);
+
+    if (localPath == QStringLiteral("turn_tcp") || remotePath == QStringLiteral("turn_tcp"))
+        return QStringLiteral("turn_tcp");
+    if (localPath == QStringLiteral("turn_udp") || remotePath == QStringLiteral("turn_udp"))
+        return QStringLiteral("turn_udp");
+    if (localPath == QStringLiteral("direct") || remotePath == QStringLiteral("direct"))
+        return QStringLiteral("direct");
+    return QString();
+}
+
 QStringList orderedNetworkPaths(QStringList paths)
 {
     paths.removeDuplicates();

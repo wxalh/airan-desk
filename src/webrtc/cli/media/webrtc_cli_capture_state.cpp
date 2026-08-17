@@ -4,6 +4,9 @@
 #include "webrtc/cli/media/webrtc_cli_media_labels.h"
 
 #include <QMetaObject>
+#include <QMutexLocker>
+
+#include <utility>
 
 namespace
 {
@@ -121,6 +124,67 @@ QString stableEncodePath(const QString &incoming,
 
 } // namespace
 
+
+void WebRtcCli::enqueueCaptureState(const QString &captureMethod,
+                                    const QString &capturePath,
+                                    const QString &encodePath,
+                                    const QString &fallbackReason,
+                                    const QString &captureBackend)
+{
+    if (m_shutdownStarted.load())
+        return;
+
+    bool scheduleDrain = false;
+    {
+        QMutexLocker locker(&m_captureStateIngressMutex);
+        if (m_shutdownStarted.load())
+            return;
+        if (!captureMethod.isEmpty())
+            m_pendingCaptureState.captureMethod = captureMethod;
+        if (!capturePath.isEmpty())
+            m_pendingCaptureState.capturePath = capturePath;
+        if (!encodePath.isEmpty())
+            m_pendingCaptureState.encodePath = encodePath;
+        if (!fallbackReason.isEmpty())
+            m_pendingCaptureState.fallbackReason = fallbackReason;
+        if (!captureBackend.isEmpty())
+            m_pendingCaptureState.captureBackend = captureBackend;
+        if (!m_captureStateIngressScheduled)
+        {
+            m_captureStateIngressScheduled = true;
+            scheduleDrain = true;
+        }
+    }
+
+    if (scheduleDrain &&
+        !QMetaObject::invokeMethod(this, "drainCaptureState", Qt::QueuedConnection))
+    {
+        QMutexLocker locker(&m_captureStateIngressMutex);
+        m_captureStateIngressScheduled = false;
+    }
+}
+
+
+void WebRtcCli::drainCaptureState()
+{
+    PendingCaptureState state;
+    {
+        QMutexLocker locker(&m_captureStateIngressMutex);
+        state = std::move(m_pendingCaptureState);
+        m_pendingCaptureState = PendingCaptureState();
+        m_captureStateIngressScheduled = false;
+    }
+
+    if (m_shutdownStarted.load() || m_destroying)
+        return;
+    applyCapturePipelineState(state.captureMethod,
+                              state.capturePath,
+                              state.encodePath,
+                              state.fallbackReason);
+    if (!state.captureBackend.isEmpty() && state.captureBackend != state.captureMethod)
+        applyCaptureBackendState(state.captureBackend);
+}
+
 void WebRtcCli::onAiranCaptureFrame(airan::media::CaptureFrameDescriptor frame)
 {
     noteSessionTransportProgress();
@@ -130,31 +194,16 @@ void WebRtcCli::onAiranCaptureFrame(airan::media::CaptureFrameDescriptor frame)
     const QString fallbackReason = qstr(airan::media::toString(frame.fallback_reason));
     const QString captureMethod = captureMethodLabel(backend, frame.current_capture_path);
 
-    QMetaObject::invokeMethod(this,
-                              "applyCapturePipelineState",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, captureMethod),
-                              Q_ARG(QString, capturePath),
-                              Q_ARG(QString, encodePath),
-                              Q_ARG(QString, fallbackReason));
-    if (backend != captureMethod)
-    {
-        QMetaObject::invokeMethod(this,
-                                  "applyCaptureBackendState",
-                                  Qt::QueuedConnection,
-                                  Q_ARG(QString, backend));
-    }
+    enqueueCaptureState(captureMethod, capturePath, encodePath, fallbackReason, backend);
 }
 
 void WebRtcCli::onAiranCaptureTransition(const airan::media::PathTransition &transition)
 {
-    QMetaObject::invokeMethod(this,
-                              "applyCapturePipelineState",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, QString()),
-                              Q_ARG(QString, qstr(airan::media::toString(transition.current_capture_path))),
-                              Q_ARG(QString, qstr(airan::media::toString(transition.current_encode_path))),
-                              Q_ARG(QString, qstr(airan::media::toString(transition.fallback_reason))));
+    enqueueCaptureState(QString(),
+                        qstr(airan::media::toString(transition.current_capture_path)),
+                        qstr(airan::media::toString(transition.current_encode_path)),
+                        qstr(airan::media::toString(transition.fallback_reason)),
+                        QString());
 }
 
 void WebRtcCli::applyCapturePipelineState(const QString &captureMethod,

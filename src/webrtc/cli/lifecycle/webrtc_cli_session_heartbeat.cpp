@@ -27,7 +27,7 @@ void WebRtcCli::setupHeartbeatChannelCallbacks()
 
 void WebRtcCli::onHeartbeatChannelOpen()
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     if (QThread::currentThread() != thread())
     {
@@ -39,6 +39,7 @@ void WebRtcCli::onHeartbeatChannelOpen()
     m_lastSessionOutboundMs.store(now);
     m_lastSessionProgressMs.store(now);
     m_lastBufferedAmount = sampleSessionBufferedAmount();
+    m_lastSessionHeartbeatSentMs = 0;
     m_heartbeatNegotiated.store(false);
     if (m_sessionHeartbeatTimer)
         m_sessionHeartbeatTimer->start(1000);
@@ -47,7 +48,7 @@ void WebRtcCli::onHeartbeatChannelOpen()
 
 void WebRtcCli::onHeartbeatChannelMessage(rtc::message_variant data)
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     noteSessionInboundActivity();
     if (!std::holds_alternative<std::string>(data))
@@ -72,18 +73,33 @@ void WebRtcCli::onHeartbeatChannelMessage(rtc::message_variant data)
 
 void WebRtcCli::onHeartbeatChannelError(std::string error)
 {
-    if (!m_shutdownStarted.load())
+    if (!m_shutdownRequested.load() && !m_shutdownStarted.load())
         LOG_WARN("Session heartbeat channel error: {}", error);
 }
 
 void WebRtcCli::onHeartbeatChannelClosed()
 {
-    if (!m_shutdownStarted.load())
-        LOG_WARN("Session heartbeat channel closed; waiting for session timeout");
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() || m_destroying)
+        return;
+    if (QThread::currentThread() != thread())
+    {
+        const QPointer<WebRtcCli> guard(this);
+        m_callbackDispatcher->post([guard]() {
+            if (guard)
+                guard->onHeartbeatChannelClosed();
+        });
+        return;
+    }
+    LOG_WARN("Session heartbeat channel closed; destroying stale controlled session");
+    m_disconnectReason = QStringLiteral("heartbeat_channel_closed");
+    emit destroyCli();
 }
 
 void WebRtcCli::sendSessionHeartbeat(const QString &action)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     if (!m_heartbeatChannel || !m_heartbeatChannel->isOpen())
         return;
     const QJsonObject object = JsonUtil::createObject()
@@ -94,7 +110,10 @@ void WebRtcCli::sendSessionHeartbeat(const QString &action)
     try
     {
         if (m_heartbeatChannel->send(JsonUtil::toCompactString(object).toStdString()))
+        {
+            m_lastSessionHeartbeatSentMs = QDateTime::currentMSecsSinceEpoch();
             noteSessionOutboundActivity();
+        }
     }
     catch (const std::exception &e)
     {
@@ -135,8 +154,11 @@ quint64 WebRtcCli::sampleSessionBufferedAmount() const
 
 void WebRtcCli::pollSessionHeartbeat()
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
+    flushPendingFileTextMessages();
+    flushPendingInputMessages();
+    flushPendingClipboardControlMessages();
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (m_lastSessionOutboundMs.load() == 0)
         m_lastSessionOutboundMs.store(now);
@@ -149,7 +171,7 @@ void WebRtcCli::pollSessionHeartbeat()
         noteSessionTransportProgress();
     m_lastBufferedAmount = buffered;
     if (m_heartbeatChannel && m_heartbeatChannel->isOpen() &&
-        now - m_lastSessionOutboundMs.load() >= kHeartbeatIntervalMs)
+        (m_lastSessionHeartbeatSentMs == 0 || now - m_lastSessionHeartbeatSentMs >= kHeartbeatIntervalMs))
         sendSessionHeartbeat(QStringLiteral("ping"));
     if (!m_heartbeatNegotiated.load())
         return;

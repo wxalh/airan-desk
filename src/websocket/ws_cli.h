@@ -7,6 +7,8 @@
 #include <QWebSocket>
 #include <QAuthenticator>
 #include <QNetworkProxy>
+#include <QQueue>
+#include <QElapsedTimer>
 #include <QSslPreSharedKeyAuthenticator>
 #include "common/constant.h"
 
@@ -18,6 +20,17 @@ public:
     ~WsCli();
 
 private:
+    static constexpr qint64 kMaxInboundMessageBytes = 8LL * 1024 * 1024;
+
+    struct PendingMessage
+    {
+        bool binary{false};
+        QString text;
+        QByteArray bytes;
+        qint64 size{0};
+        quint64 generation{0};
+    };
+
     quint64 m_heart_interval_ms = 30000;
     QTimer *m_heart_timer = nullptr;
     QTimer *m_reconnect_timer = nullptr;
@@ -27,14 +40,23 @@ private:
     bool m_connected = false;
     bool autoConnect = false;
     bool m_shutdownDone = false;
+    QQueue<PendingMessage> m_pendingMessages;
+    qint64 m_pendingMessageBytes = 0;
+    quint64 m_messageGeneration{1};
 
     int m_reconnect_phase = 0;
     int m_reconnect_count = 0;
+    QElapsedTimer m_socketConnectTimer;
     static const int MAX_RETRY_PER_PHASE = 10;
 
     void scheduleReconnect();
     void performShutdown();
     void destroySocket();
+    void queuePendingMessage(PendingMessage message);
+    bool sendPendingMessageNow(const PendingMessage &message);
+    bool flushPendingMessages();
+    bool isWebRtcSessionMessage(const PendingMessage &message) const;
+    void clearPendingMessages();
     static bool isSupportedSignalingUrl(const QUrl &url);
 
 signals:

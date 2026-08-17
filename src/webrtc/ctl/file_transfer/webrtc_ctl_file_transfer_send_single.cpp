@@ -7,6 +7,7 @@
 
 #include <QDateTime>
 #include <QFileInfo>
+#include <QPointer>
 
 
 bool WebRtcCtl::uploadSingleFile(const QString &ctlPath, const QString &cliPath, const QString &transferId,
@@ -55,7 +56,8 @@ bool WebRtcCtl::uploadSingleFile(const QString &ctlPath, const QString &cliPath,
                                  totalFiles);
         };
         const auto cancelCallback = [this, transferId]() {
-            return isTransferCancelled(transferId);
+            return m_shutdownRequested.load() || m_shutdownStarted.load() ||
+                   isTransferCancelled(transferId);
         };
 
         if (FilePacketUtil::sendFileStream(ctlPath, header, m_fileChannel, progressCallback, cancelCallback))
@@ -84,4 +86,98 @@ bool WebRtcCtl::uploadSingleFile(const QString &ctlPath, const QString &cliPath,
             emit recvUploadFileRes(false, cliPath, tr("Unknown exception during file stream send."));
         return false;
     }
+}
+
+
+void WebRtcCtl::uploadSingleFileAsync(const QString &ctlPath, const QString &cliPath, const QString &transferId,
+                                      qint64 baseBytes, qint64 totalBytes, int currentFileIndex, int totalFiles,
+                                      const std::function<void(bool)> &completion)
+{
+    const auto finish = [this, completion](bool success) {
+        if (completion)
+            completion(success);
+        else
+            processNextUpload();
+    };
+    const QFileInfo fileInfo(ctlPath);
+    if (!fileInfo.exists() || !fileInfo.isFile())
+    {
+        emit recvUploadFileRes(false, cliPath, tr("Source file does not exist or is not a regular file."));
+        finish(false);
+        return;
+    }
+    if (!m_fileChannel || !m_fileChannel->isOpen())
+    {
+        emit recvUploadFileRes(false, cliPath, tr("File channel is not available."));
+        finish(false);
+        return;
+    }
+
+    const QJsonObject header = JsonUtil::createObject()
+                                   .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_UPLOAD)
+                                   .add(Constant::KEY_PATH_CTL, ctlPath)
+                                   .add(Constant::KEY_PATH_CLI, cliPath)
+                                   .add(Constant::KEY_TRANSFER_ID, transferId)
+                                   .add(Constant::KEY_FILE_SIZE, static_cast<double>(fileInfo.size()))
+                                   .add("isDirectory", false)
+                                   .build();
+    const qint64 effectiveTotalBytes = totalBytes >= 0 ? totalBytes : fileInfo.size();
+    const auto lastProgressMs = std::make_shared<qint64>(0);
+    const QPointer<WebRtcCtl> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    const auto progressCallback = [guard, callbackLifetime, transferId, baseBytes, effectiveTotalBytes, currentFileIndex,
+                                   totalFiles, fileSize = fileInfo.size(), lastProgressMs](
+                                      qint64 sentBytes, qint64 packetTotalBytes) {
+        auto permit = callbackLifetime->tryEnter();
+        if (!permit || !guard)
+            return;
+        const qint64 headerBytes = qMax<qint64>(0, packetTotalBytes - fileSize);
+        const qint64 currentFileBytes = qBound<qint64>(0, sentBytes - headerBytes, fileSize);
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (currentFileBytes < fileSize && nowMs - *lastProgressMs < 120)
+            return;
+        *lastProgressMs = nowMs;
+        const bool completedFile = currentFileBytes >= fileSize;
+        if (guard && guard->m_callbackDispatcher)
+            guard->m_callbackDispatcher->post([guard, callbackLifetime, transferId, baseBytes, effectiveTotalBytes,
+                                                currentFileIndex, totalFiles, currentFileBytes,
+                                                completedFile]() {
+            auto permit = callbackLifetime->tryEnter();
+            if (permit && guard)
+                guard->emitTransferProgress(transferId,
+                                            qMin(baseBytes + currentFileBytes, effectiveTotalBytes),
+                                            effectiveTotalBytes,
+                                            completedFile ? currentFileIndex : qMax(0, currentFileIndex - 1),
+                                            totalFiles);
+            });
+    };
+    const auto cancelCallback = [guard, callbackLifetime, transferId]() {
+        auto permit = callbackLifetime->tryEnter();
+        if (!permit)
+            return true;
+        return !guard || guard->m_shutdownRequested.load() || guard->m_shutdownStarted.load() ||
+               guard->isTransferCancelled(transferId);
+    };
+    const auto completionCallback = [guard, callbackLifetime, finish, cliPath, transferId](bool success, const QString &) {
+        auto permit = callbackLifetime->tryEnter();
+        if (!permit || !guard)
+            return;
+        if (guard && guard->m_callbackDispatcher)
+            guard->m_callbackDispatcher->post([guard, callbackLifetime, finish, cliPath, transferId, success]() {
+            auto permit = callbackLifetime->tryEnter();
+            if (!permit || !guard)
+                return;
+            if (!success && !guard->isTransferCancelled(transferId))
+                emit guard->recvUploadFileRes(false, cliPath, QObject::tr("Failed to send file stream."));
+            finish(success);
+            });
+    };
+
+    FilePacketUtil::sendFileStreamAsync(ctlPath,
+                                        header,
+                                        m_fileChannel,
+                                        progressCallback,
+                                        cancelCallback,
+                                        completionCallback,
+                                        false);
 }

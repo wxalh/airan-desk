@@ -40,8 +40,8 @@ available from <https://formulae.brew.sh/formula/qt@5>.
 
 Airan-Desk uses milestone-specific Google WebRTC static libraries built by
 `wxalh/libwebrtc_build`. Each packaged slice includes its actual `args.gn`,
-package checksum, and exact `source_revision.txt`. This metadata and the static
-library contents identify the slice's H.264/FFmpeg/OpenH264 content. WebRTC and
+exact `source_revision.txt`, and `PACKAGE-METADATA.json`. This metadata and the
+static library contents identify the slice's H.264/FFmpeg/OpenH264 content. WebRTC and
 the linked third-party components are under BSD-style, MIT, ISC, and other
 licenses reproduced in:
 
@@ -55,9 +55,10 @@ Source provenance:
 - WebRTC m144: <https://webrtc.googlesource.com/src/+/refs/branch-heads/7559>
 - Build scripts: <https://github.com/wxalh/libwebrtc_build>
 
-The package records the exact GN arguments in `WebRTC-args.gn`, its archive
-checksum in `WebRTC-package.sha256`, and the exact source revision in
-`WebRTC-source-revision.txt`. All three files appear beside the notices.
+The package records the exact GN arguments in `WebRTC-args.gn` and the exact
+source revision in `WebRTC-source-revision.txt`. Archive integrity is verified
+against `libwebrtc-manifest.json` before extraction; downloader cache markers
+are not copied into the Airan-Desk package.
 
 ## OpenSSL
 

@@ -82,6 +82,7 @@ void ControlWindow::beginAsyncShutdown()
         disconnect(m_ws, nullptr, &m_rtc_ctl, nullptr);
     disconnect(this, nullptr, &m_rtc_ctl, nullptr);
     disconnect(&m_rtc_ctl, nullptr, this, nullptr);
+    m_rtc_ctl.requestShutdown();
     {
         QMutexLocker locker(&m_videoFrameMutex);
         m_pendingVideoFrame = QImage();

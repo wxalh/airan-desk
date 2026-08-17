@@ -141,6 +141,107 @@ public:
 private:
     std::function<void(MediaStats)> m_cb;
 };
+
+
+bool readCandidateInfo(const webrtc::RTCStatsReport &report,
+                       const std::string &candidateId,
+                       bool local,
+                       IceCandidateInfo *result)
+{
+    if (!result || candidateId.empty())
+        return false;
+
+    const webrtc::RTCIceCandidateStats *candidate = local
+        ? static_cast<const webrtc::RTCIceCandidateStats *>(report.GetAs<webrtc::RTCLocalIceCandidateStats>(candidateId))
+        : static_cast<const webrtc::RTCIceCandidateStats *>(report.GetAs<webrtc::RTCRemoteIceCandidateStats>(candidateId));
+    if (!candidate)
+        return false;
+
+    if (hasStatsValue(candidate->candidate_type))
+        result->candidateType = statsValue(candidate->candidate_type);
+    if (hasStatsValue(candidate->protocol))
+        result->protocol = statsValue(candidate->protocol);
+    if (hasStatsValue(candidate->relay_protocol))
+        result->relayProtocol = statsValue(candidate->relay_protocol);
+    return !result->candidateType.empty();
+}
+
+
+bool readCandidatePair(const webrtc::RTCStatsReport &report,
+                       const std::string &pairId,
+                       SelectedCandidatePair *result)
+{
+    if (!result || pairId.empty())
+        return false;
+
+    const auto *pair = report.GetAs<webrtc::RTCIceCandidatePairStats>(pairId);
+    if (!pair || !hasStatsValue(pair->local_candidate_id) || !hasStatsValue(pair->remote_candidate_id))
+        return false;
+
+    SelectedCandidatePair candidatePair;
+    if (!readCandidateInfo(report, statsValue(pair->local_candidate_id), true, &candidatePair.local) ||
+        !readCandidateInfo(report, statsValue(pair->remote_candidate_id), false, &candidatePair.remote))
+    {
+        return false;
+    }
+
+    *result = std::move(candidatePair);
+    return true;
+}
+
+
+class SelectedCandidatePairCollector : public webrtc::RTCStatsCollectorCallback
+{
+public:
+    explicit SelectedCandidatePairCollector(std::function<void(bool, SelectedCandidatePair)> cb)
+        : m_cb(std::move(cb))
+    {
+    }
+
+    void OnStatsDelivered(const scoped_refptr<const webrtc::RTCStatsReport> &report) override
+    {
+        SelectedCandidatePair result;
+        bool found = false;
+        if (report)
+        {
+            for (const webrtc::RTCStats &stats : *report)
+            {
+                if (stats.type() != webrtc::RTCTransportStats::kType)
+                    continue;
+                const auto &transport = stats.cast_to<const webrtc::RTCTransportStats>();
+                if (hasStatsValue(transport.selected_candidate_pair_id) &&
+                    readCandidatePair(*report, statsValue(transport.selected_candidate_pair_id), &result))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                for (const webrtc::RTCStats &stats : *report)
+                {
+                    if (stats.type() != webrtc::RTCIceCandidatePairStats::kType)
+                        continue;
+                    const auto &pair = stats.cast_to<const webrtc::RTCIceCandidatePairStats>();
+                    const bool nominated = hasStatsValue(pair.nominated) && statsValue(pair.nominated);
+                    const bool succeeded = !hasStatsValue(pair.state) || statsValue(pair.state) == "succeeded";
+                    if (nominated && succeeded && readCandidatePair(*report, std::string(pair.id()), &result))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (m_cb)
+            m_cb(found, std::move(result));
+    }
+
+private:
+    std::function<void(bool, SelectedCandidatePair)> m_cb;
+};
 } // namespace
 
 
@@ -148,6 +249,13 @@ scoped_refptr<webrtc::RTCStatsCollectorCallback>
 createMediaStatsCollector(std::function<void(MediaStats)> cb)
 {
     return make_ref_counted<MediaStatsCollector>(std::move(cb));
+}
+
+
+scoped_refptr<webrtc::RTCStatsCollectorCallback>
+createSelectedCandidatePairCollector(std::function<void(bool, SelectedCandidatePair)> cb)
+{
+    return make_ref_counted<SelectedCandidatePairCollector>(std::move(cb));
 }
 
 } // namespace rtc

@@ -1,11 +1,35 @@
 #include "webrtc/ctl/webrtc_ctl.h"
 
+#include "util/file/file_packet_util.h"
+#include "util/text/convert_util.h"
+
 #include <QFileInfo>
+#include <QMetaObject>
+#include <QPointer>
+
+namespace
+{
+constexpr int kMaxPendingUploadRequests = 1024;
+constexpr int kMaxTransferPathChars = 32 * 1024;
+constexpr int kMaxTransferIdChars = 256;
+}
 
 
 void WebRtcCtl::uploadFile2CLI(const QString &ctlPath, const QString &cliPath, const QString &transferId)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     LOG_WARN("uploadFile2CLI called: {} -> {}", ctlPath, cliPath);
+    if (ctlPath.size() > kMaxTransferPathChars || cliPath.size() > kMaxTransferPathChars ||
+        transferId.size() > kMaxTransferIdChars ||
+        m_pendingUploads.size() >= kMaxPendingUploadRequests)
+    {
+        LOG_ERROR("Rejected upload request because the pending queue or fields exceed limits: queued={}, ctlChars={}, cliChars={}, transferIdChars={}",
+                  m_pendingUploads.size(), ctlPath.size(), cliPath.size(), transferId.size());
+        emit recvUploadFileRes(false, cliPath, tr("Too many pending upload requests."));
+        return;
+    }
     m_pendingUploads.enqueue({ctlPath, cliPath, transferId});
     processUploadQueue();
 }
@@ -17,7 +41,19 @@ void WebRtcCtl::processUploadQueue()
         return;
 
     m_uploadQueueActive = true;
-    while (!m_pendingUploads.isEmpty())
+    processNextUpload();
+}
+
+
+void WebRtcCtl::processNextUpload()
+{
+    if (m_shutdownRequested.load())
+    {
+        m_uploadQueueActive = false;
+        return;
+    }
+
+    while (!m_pendingUploads.isEmpty() && !m_shutdownRequested.load())
     {
         const PendingUpload upload = m_pendingUploads.dequeue();
         if (isTransferCancelled(upload.transferId))
@@ -45,12 +81,14 @@ void WebRtcCtl::processUploadQueue()
         if (fileInfo.isFile())
         {
             emit fileTransferStarted(transferId, ctlPath, cliPath, tr("Upload"));
-            uploadSingleFile(ctlPath, cliPath, transferId, 0, fileInfo.size(), 1, 1);
+            uploadSingleFileAsync(ctlPath, cliPath, transferId, 0, fileInfo.size(), 1, 1);
+            return;
         }
         else if (fileInfo.isDir())
         {
             emit fileTransferStarted(transferId, ctlPath, cliPath, tr("Upload"));
             uploadDirectory(ctlPath, cliPath, transferId);
+            return;
         }
         else
         {

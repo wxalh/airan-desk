@@ -21,10 +21,9 @@ void WebRtcCli::createTracksAndChannels()
             rtc::Description::Video videoDesc(videoName);
             videoDesc.addSSRC(1, videoName, Constant::TYPE_VIDEO_MSID.toStdString(), videoName);
             videoDesc.setDirection(rtc::Description::Direction::SendOnly);
-            videoDesc.setDesktopSourceIndex(desktopSourceIndexForScreenIndex(m_screenIndex));
-            intptr_t desktopSourceId = 0;
-            if (desktopSourceIdForScreenIndex(m_screenIndex, &desktopSourceId))
-                videoDesc.setDesktopSourceId(desktopSourceId);
+            videoDesc.setDesktopSourceIndex(m_currentDesktopSourceIndex);
+            if (m_currentDesktopSourceHasId)
+                videoDesc.setDesktopSourceId(m_currentDesktopSourceId);
             videoDesc.setDesktopFps(effectiveCaptureFps());
             videoDesc.setDesktopQualityProfile(m_qualityProfile.toStdString());
             videoDesc.setDesktopTargetResolution(m_visible_width, m_visible_height);

@@ -136,7 +136,10 @@ int32_t FfmpegVideoDecoder::Decode(const webrtc::EncodedImage &inputImage,
     if (m_keyFrameRequired)
     {
         if (!inputIsKeyFrame)
-            return WEBRTC_VIDEO_CODEC_ERROR;
+        {
+            LOG_DEBUG("FFmpeg decoder is waiting for a key frame; requesting recovery key frame");
+            return WEBRTC_VIDEO_CODEC_OK_REQUEST_KEYFRAME;
+        }
         m_keyFrameRequired = false;
     }
     if (hasEncodedSize)

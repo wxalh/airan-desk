@@ -139,7 +139,7 @@ bool TerminalSession::startPty(int cols, int rows)
             return false;
         }
 
-        QByteArray promptCommand = "printf '\\033]7;file://localhost%s\\007' \"$PWD\"";
+        QByteArray promptCommand = "__airan_pwd=$PWD; __airan_pwd=${__airan_pwd//%/%25}; __airan_pwd=${__airan_pwd// /%20}; __airan_pwd=${__airan_pwd//#/%23}; __airan_pwd=${__airan_pwd//\\?/%3F}; printf '\\033]7;file://localhost%s\\007' \"$__airan_pwd\"";
         if (!inheritedPromptCommand.trimmed().isEmpty())
             promptCommand += QByteArray("; ") + inheritedPromptCommand;
         environmentStorage.push_back(QByteArray("AIRAN_DESK_PATH_PROMPT_COMMAND=") + promptCommand);

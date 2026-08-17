@@ -33,9 +33,9 @@ Homebrew `qt@5` 的配方和源码地址见
 ## WebRTC m109 和 m144
 
 Airan-Desk 使用由 `wxalh/libwebrtc_build` 构建的里程碑专用 Google WebRTC
-静态库。每个随包 slice 都包含实际 `args.gn`、包校验值和精确
-`source_revision.txt`。这些元数据与静态库共同记录该 slice 的 H.264、FFmpeg 或
-OpenH264 内容。WebRTC 及其链接的第三方组件适用 BSD-style、MIT、ISC 和其他
+静态库。每个随包 slice 都包含实际 `args.gn`、精确 `source_revision.txt` 和
+`PACKAGE-METADATA.json`。这些元数据与静态库共同记录该 slice 的 H.264、FFmpeg
+或 OpenH264 内容。WebRTC 及其链接的第三方组件适用 BSD-style、MIT、ISC 和其他
 许可证，文本包含在：
 
 - `licenses/WebRTC-LICENSE.txt`
@@ -48,9 +48,9 @@ OpenH264 内容。WebRTC 及其链接的第三方组件适用 BSD-style、MIT、
 - WebRTC m144：<https://webrtc.googlesource.com/src/+/refs/branch-heads/7559>
 - 构建脚本：<https://github.com/wxalh/libwebrtc_build>
 
-发布包将精确 GN 参数记录为 `WebRTC-args.gn`，将归档校验值记录为
-`WebRTC-package.sha256`，并将精确源码修订记录为
-`WebRTC-source-revision.txt`。三个文件均位于许可证目录。
+发布包将精确 GN 参数记录为 `WebRTC-args.gn`，并将精确源码修订记录为
+`WebRTC-source-revision.txt`。归档完整性在解压前依据 `libwebrtc-manifest.json`
+校验；下载器缓存标记不会复制到 Airan-Desk 发布包。
 
 ## OpenSSL
 

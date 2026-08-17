@@ -107,6 +107,7 @@ private:
     VTermModifier mouseModifiersFromQt(Qt::KeyboardModifiers modifiers) const;
     QColor colorFromVTerm(VTermColor color, bool foreground) const;
     QString cellText(const VTermScreenCell &cell) const;
+    QRect cursorPaintRect() const;
     void updateCursorBlink();
 
     TerminalEmulatorWorker *m_worker = nullptr;

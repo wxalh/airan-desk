@@ -1,6 +1,8 @@
 #include "util/file/file_packet_util.h"
 #include "util/text/convert_util.h"
 
+#include <QTemporaryFile>
+
 namespace
 {
 constexpr qint64 kReassemblyTimeoutMs = 10 * 60 * 1000;
@@ -80,16 +82,19 @@ void FilePacketUtil::reassembleFragment(const QString &messageId, quint64 fragme
             buffer.timestamp = nowMs;
 
             QString safeMessageId = QString(messageId).replace("/", "_").replace("\\", "_");
-            buffer.tempFilePath = QDir::tempPath() + "/" + safeMessageId + ".tmp";
-            buffer.tempFile = new QFile(buffer.tempFilePath);
+            auto *tempFile = new QTemporaryFile(
+                QDir::temp().filePath(QStringLiteral("airan-file-%1-XXXXXX.tmp").arg(safeMessageId)));
+            tempFile->setAutoRemove(false);
+            buffer.tempFile = tempFile;
             if (!buffer.tempFile->open(QIODevice::WriteOnly))
             {
-                LOG_ERROR("Failed to create temp file for reassembly: {}", buffer.tempFilePath);
+                LOG_ERROR("Failed to create unique temp file for reassembly: {}", tempFile->errorString());
                 delete buffer.tempFile;
                 buffer.tempFile = nullptr;
                 m_reassemblyBuffers.erase(messageId);
                 return;
             }
+            buffer.tempFilePath = tempFile->fileName();
 
             LOG_DEBUG("Created reassembly temp file: {}", buffer.tempFilePath);
         }

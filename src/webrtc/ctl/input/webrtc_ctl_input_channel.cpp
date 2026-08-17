@@ -10,6 +10,113 @@
 #include <QThread>
 #include <QUuid>
 
+namespace
+{
+constexpr int kMaxPendingInputControlMessages = 128;
+constexpr qint64 kMaxPendingInputControlMessageBytes = 512 * 1024;
+
+qint64 messageSize(const rtc::message_variant &data)
+{
+    return std::visit([](const auto &value) -> qint64 {
+        return static_cast<qint64>(value.size());
+    }, data);
+}
+}
+
+
+void WebRtcCtl::queueInputControlMessage(const rtc::message_variant &data)
+{
+    const qint64 bytes = messageSize(data);
+    if (m_pendingInputControlMessages.size() >= kMaxPendingInputControlMessages ||
+        bytes > kMaxPendingInputControlMessageBytes - m_pendingInputControlMessageBytes)
+    {
+        LOG_ERROR("Input control queue overflow; reconnecting instead of dropping input state: size={}, queuedBytes={}, queuedMessages={}",
+                  bytes, m_pendingInputControlMessageBytes, m_pendingInputControlMessages.size());
+        requestSessionReconnect(tr("Input control queue is full, reconnecting..."));
+        return;
+    }
+    m_pendingInputControlMessages.enqueue(data);
+    m_pendingInputControlMessageBytes += bytes;
+}
+
+
+void WebRtcCtl::flushPendingInputControlMessages()
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
+    if (!m_inputChannel || !m_inputChannel->isOpen())
+        return;
+    if (m_pendingInputMoveBoundary)
+    {
+        retryPendingInputMoveBoundary();
+        if (m_pendingInputMoveBoundary)
+            return;
+    }
+
+    while (!m_pendingInputControlMessages.isEmpty())
+    {
+        const rtc::message_variant &message = m_pendingInputControlMessages.head();
+        bool sent = false;
+        try
+        {
+            sent = m_inputChannel->send(message);
+        }
+        catch (const std::exception &e)
+        {
+            LOG_WARN("Failed to flush pending input control message: {}", e.what());
+        }
+        catch (...)
+        {
+            LOG_WARN("Failed to flush pending input control message: unknown error");
+        }
+        if (!sent)
+            return;
+        noteSessionOutboundActivity();
+        m_pendingInputControlMessageBytes -= messageSize(message);
+        m_pendingInputControlMessages.dequeue();
+    }
+}
+
+
+bool WebRtcCtl::sendInputControlMessage(const rtc::message_variant &data)
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return false;
+
+    if (!m_inputChannel || !m_inputChannel->isOpen())
+    {
+        queueInputControlMessage(data);
+        return false;
+    }
+
+    flushPendingInputControlMessages();
+    if (!m_pendingInputControlMessages.isEmpty())
+    {
+        queueInputControlMessage(data);
+        return false;
+    }
+
+    bool sent = false;
+    try
+    {
+        sent = m_inputChannel->send(data);
+    }
+    catch (const std::exception &e)
+    {
+        LOG_WARN("Failed to send input control message: {}", e.what());
+    }
+    catch (...)
+    {
+        LOG_WARN("Failed to send input control message: unknown error");
+    }
+    if (sent)
+        noteSessionOutboundActivity();
+    else
+        queueInputControlMessage(data);
+    return sent;
+}
+
 
 void WebRtcCtl::onInputChannelOpen()
 {
@@ -26,7 +133,7 @@ void WebRtcCtl::onInputChannelOpen()
     }
     const QString channelLabel = m_inputChannel ? QString::fromStdString(m_inputChannel->label()) : QString();
     LOG_INFO("Input channel opened: {}", channelLabel);
-    retryPendingInputMoveBoundary();
+    flushPendingInputControlMessages();
     sendStreamConfig();
     requestCurrentAudioMode();
     if (!m_isOnlyFile && m_controlHeartbeatTimer)
@@ -80,8 +187,9 @@ void WebRtcCtl::sendStreamConfig()
 
     try
     {
-        m_inputChannel->send(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
-        noteSessionOutboundActivity();
+        const bool sent = sendInputControlMessage(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
+        if (!sent)
+            LOG_WARN("Initial stream config was queued because the input channel rejected it");
         LOG_INFO("Initial stream config sent: networkPath={}, mediaTopology={}, qualityProfile={}, resolution={}x{}, maxFps={}, wgc={}, dxgi={}, dxgiNativeGpu={}",
                  m_networkPath,
                  m_mediaTopology,
@@ -120,8 +228,9 @@ void WebRtcCtl::requestCurrentAudioMode()
 
     try
     {
-        m_inputChannel->send(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
-        noteSessionOutboundActivity();
+        const bool sent = sendInputControlMessage(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
+        if (!sent)
+            LOG_WARN("Initial audio mode request was queued because the input channel rejected it");
         LOG_INFO("Initial remote audio mode confirmation requested: mode={}, requestId={}", m_audioMode, requestId);
     }
     catch (const std::exception &e)

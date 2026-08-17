@@ -28,33 +28,28 @@ QString NativeTerminalWidget::preferredTerminalFontFamily()
 QString NativeTerminalWidget::pathFromOsc7Payload(const QByteArray &payload)
 {
     const QString text = QString::fromUtf8(payload);
-    const QUrl url(text);
-    if (url.scheme() == QStringLiteral("file"))
-    {
-        QString path;
-        const QString host = url.host().toLower();
-        if (host.isEmpty() || host == QStringLiteral("localhost"))
-            path = QUrl::fromPercentEncoding(url.path().toUtf8());
-        else
-            path = url.toLocalFile();
+    if (!text.startsWith(QStringLiteral("file://"), Qt::CaseInsensitive))
+        return QString();
 
-        if (!path.isEmpty())
-        {
-            if (path.size() >= 3 && path.at(0) == QLatin1Char('/') && path.at(2) == QLatin1Char(':'))
-                path.remove(0, 1);
-            return QDir::fromNativeSeparators(path);
-        }
-    }
+    const QString remainder = text.mid(7);
+    const int slash = remainder.indexOf(QLatin1Char('/'));
+    if (slash < 0)
+        return QString();
 
-    const QString prefix = QStringLiteral("file:///");
-    if (text.startsWith(prefix, Qt::CaseInsensitive))
-    {
-        QString path = QUrl::fromPercentEncoding(text.mid(prefix.size()).toUtf8());
-        if (path.size() >= 2 && path.at(1) == QLatin1Char(':'))
-            return QDir::fromNativeSeparators(path);
-        return QDir::fromNativeSeparators(QStringLiteral("/") + path);
-    }
-    return QString();
+    const QString host = remainder.left(slash);
+    const QString rawPath = remainder.mid(slash);
+    QString path = host.isEmpty()
+                       ? rawPath
+                       : QUrl::fromPercentEncoding(rawPath.toUtf8());
+    if (!host.isEmpty() && host.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) != 0)
+        path = QStringLiteral("//") + host + path;
+    const bool leadingSlashBeforeUnc = path.size() >= 3 && path.at(0) == QLatin1Char('/') &&
+                                       ((path.at(1) == QLatin1Char('/') && path.at(2) == QLatin1Char('/')) ||
+                                        (path.at(1) == QLatin1Char('\\') && path.at(2) == QLatin1Char('\\')));
+    if (leadingSlashBeforeUnc ||
+        (path.size() >= 3 && path.at(0) == QLatin1Char('/') && path.at(2) == QLatin1Char(':')))
+        path.remove(0, 1);
+    return QDir::fromNativeSeparators(path);
 }
 
 

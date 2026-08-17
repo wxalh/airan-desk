@@ -113,7 +113,30 @@ void SettingsWindow::testSpeaker()
         return;
 
     const QString preferredOutput = selectedAudioDeviceValue(m_audioLoopbackDeviceCombo);
+#if defined(Q_OS_WIN64) || defined(Q_OS_WIN32) || defined(Q_OS_LINUX)
+    if (m_speakerTestRunning.exchange(true))
+        return;
+    if (m_testSpeakerBtn)
+        m_testSpeakerBtn->setEnabled(false);
+
+    const std::shared_ptr<std::atomic_bool> callbackState = m_asyncCallbacksAlive;
+    SettingsWindow *const receiver = this;
+    std::thread([callbackState, receiver, preferredOutput]() {
+        SettingsAudioBackend::playToneOnOutput(preferredOutput);
+        QCoreApplication *application = QCoreApplication::instance();
+        if (!application)
+            return;
+        QTimer::singleShot(0, application, [callbackState, receiver]() {
+            if (!callbackState->load())
+                return;
+            receiver->m_speakerTestRunning.store(false);
+            if (receiver->m_testSpeakerBtn)
+                receiver->m_testSpeakerBtn->setEnabled(true);
+        });
+    }).detach();
+#else
     SettingsAudioBackend::playToneOnOutput(preferredOutput);
+#endif
 }
 
 
@@ -122,7 +145,6 @@ void SettingsWindow::toggleMicTest()
     if (m_micTestRunning.load())
     {
         stopMicTest();
-        onMicTestStopped();
         return;
     }
 

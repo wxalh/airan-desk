@@ -28,6 +28,9 @@ void WebRtcCtl::onFileChannelOpen()
         return;
     }
     const QString channelLabel = m_fileChannel ? QString::fromStdString(m_fileChannel->label()) : QString();
+    m_fileIngressOverflowed.store(false);
+    if (m_filePacketUtil)
+        m_filePacketUtil->clearPendingReassemblies();
     LOG_INFO("File channel opened: {}", channelLabel);
 }
 
@@ -46,7 +49,17 @@ void WebRtcCtl::onFileChannelClosed()
         return;
     }
     const QString channelLabel = m_fileChannel ? QString::fromStdString(m_fileChannel->label()) : QString();
+    {
+        QMutexLocker locker(&m_fileIngressMutex);
+        m_fileIngress.clear();
+        m_fileIngressBytes = 0;
+        m_fileIngressScheduled = false;
+        m_fileIngressDrained.wakeAll();
+    }
+    if (m_filePacketUtil)
+        m_filePacketUtil->clearPendingReassemblies();
     LOG_INFO("File channel closed: {}", channelLabel);
+    requestSessionReconnect(tr("File channel closed, reconnecting..."));
 }
 
 
@@ -65,6 +78,7 @@ void WebRtcCtl::onFileChannelError(const std::string &error)
         return;
     }
     LOG_ERROR("File channel error: {}", error);
+    requestSessionReconnect(tr("File channel failed, reconnecting..."));
 }
 
 
@@ -91,24 +105,36 @@ void WebRtcCtl::onFileChannelMessage(const rtc::message_variant &message)
     }
 
     bool scheduleDrain = false;
+    bool overflowed = false;
     {
         QMutexLocker locker(&m_fileIngressMutex);
-        while (!m_shutdownStarted.load() &&
-               (m_fileIngressBytes + static_cast<qint64>(binaryData.size()) > kMaxFileIngressBytes ||
-                m_fileIngress.size() >= kMaxFileIngressFragments))
-        {
-            m_fileIngressDrained.wait(&m_fileIngressMutex, 50);
-        }
         if (m_shutdownStarted.load())
             return;
 
-        m_fileIngressBytes += static_cast<qint64>(binaryData.size());
-        m_fileIngress.emplace_back(std::move(binaryData));
-        if (!m_fileIngressScheduled)
+        overflowed = m_fileIngressBytes + static_cast<qint64>(binaryData.size()) > kMaxFileIngressBytes ||
+                     m_fileIngress.size() >= kMaxFileIngressFragments;
+        if (!overflowed)
         {
-            m_fileIngressScheduled = true;
-            scheduleDrain = true;
+            m_fileIngressBytes += static_cast<qint64>(binaryData.size());
+            m_fileIngress.emplace_back(std::move(binaryData));
+            if (!m_fileIngressScheduled)
+            {
+                m_fileIngressScheduled = true;
+                scheduleDrain = true;
+            }
         }
+    }
+
+    if (overflowed)
+    {
+        if (m_fileIngressOverflowed.exchange(true))
+            return;
+        LOG_ERROR("File ingress queue is full; closing file channel to abort the transfer without blocking WebRTC callbacks");
+        if (m_fileChannel)
+            m_fileChannel->close();
+        if (m_filePacketUtil)
+            m_filePacketUtil->clearPendingReassemblies();
+        return;
     }
 
     if (scheduleDrain)

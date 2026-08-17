@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QTableWidget>
+#include <QUuid>
 
 
 void FileTransferWindow::on_remotePathCombo_textActivated(const QString &path)
@@ -49,10 +50,18 @@ void FileTransferWindow::on_remoteTable_cellDoubleClicked(int row, int column)
 
 void FileTransferWindow::requestRemoteFileList(const QString &path)
 {
+    if (isClosing())
+        return;
+
     const QString targetPath = path.isEmpty() ? Constant::FOLDER_HOME : path;
+    m_pendingFileListRequestId = QUuid::createUuid().toString();
+    m_pendingFileListRequestId.remove(QLatin1Char('{'));
+    m_pendingFileListRequestId.remove(QLatin1Char('}'));
+    m_pendingFileListRequestPath = targetPath;
     QJsonObject obj = JsonUtil::createObject()
                           .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_LIST)
                           .add(Constant::KEY_PATH, targetPath)
+                          .add(Constant::KEY_REQUEST_ID, m_pendingFileListRequestId)
                           .build();
 
     QByteArray msg = JsonUtil::toCompactBytes(obj);

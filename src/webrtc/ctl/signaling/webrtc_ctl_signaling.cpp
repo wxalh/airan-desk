@@ -4,6 +4,10 @@
 
 void WebRtcCtl::sendDisconnectSignal(const QString &reason)
 {
+    const bool explicitUserDisconnect = reason == QStringLiteral("controller_user");
+    if ((m_shutdownRequested.load() || m_shutdownStarted.load()) && !explicitUserDisconnect)
+        return;
+
     if (m_disconnectSent || m_remoteDisconnectReceived)
         return;
 
@@ -27,6 +31,9 @@ void WebRtcCtl::notifyLocalDisconnect()
 
 void WebRtcCtl::parseWsMsg(const QJsonObject &object)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     
     if (!object.contains(Constant::KEY_ROLE) || !object.contains(Constant::KEY_TYPE))
         return;
@@ -58,10 +65,21 @@ void WebRtcCtl::parseWsMsg(const QJsonObject &object)
                       sessionId, m_sessionId, m_sessionLabel);
             return;
         }
-        m_remoteDisconnectReceived = true;
-        disableReconnect();
         const QString reason = JsonUtil::getString(
             object, Constant::KEY_REASON, QStringLiteral("controlled_user"));
+        m_remoteDisconnectReceived = true;
+        const bool transientFailure = reason == QStringLiteral("connection_start_timeout") ||
+                                      reason == QStringLiteral("remote_description_failed") ||
+                                      reason == QStringLiteral("ice_candidate_queue_overflow");
+        if (transientFailure)
+        {
+            // A controlled-side startup failure is not a user disconnect.
+            // Keep the window alive and let the normal reconnect backoff
+            // rebuild the peer after the remote tears down its old session.
+            requestSessionReconnect(tr("Remote WebRTC startup failed, reconnecting..."));
+            return;
+        }
+        disableReconnect();
         emit remoteDisconnectRequested(reason, false);
         return;
     }
@@ -76,7 +94,17 @@ void WebRtcCtl::parseWsMsg(const QJsonObject &object)
         return;
     }
 
-    if (!sessionId.isEmpty() && sessionId != m_sessionId)
+    if (type == Constant::TYPE_ERROR && !sessionId.isEmpty() && sessionId != m_sessionId)
+    {
+        LOG_TRACE("Ignore signaling error for unrelated WebRTC session sessionId={}, currentSessionId={}, label={}",
+                  sessionId, m_sessionId, m_sessionLabel);
+        return;
+    }
+
+    const bool sessionScopedSignaling = type == Constant::TYPE_OFFER ||
+                                        type == Constant::TYPE_ANSWER ||
+                                        type == Constant::TYPE_CANDIDATE;
+    if (sessionScopedSignaling && (sessionId.isEmpty() || sessionId != m_sessionId))
     {
         LOG_TRACE("Ignore signaling message {} for unrelated WebRTC session sessionId={}, currentSessionId={}, label={}",
                   type, sessionId, m_sessionId, m_sessionLabel);

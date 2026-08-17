@@ -6,12 +6,14 @@
 #include <QByteArray>
 
 class QFile;
+class QCryptographicHash;
 
 namespace FilePacketStreamHelpers
 {
 
 
-QByteArray takeFragmentPayload(QByteArray &dataBuffer, QFile *file);
+QByteArray takeFragmentPayload(QByteArray &dataBuffer, QFile *file,
+                               QCryptographicHash *fileHash = nullptr);
 
 
 rtc::binary makeFragment(const QByteArray &messageIdBytes,

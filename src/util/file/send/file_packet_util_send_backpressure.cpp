@@ -1,8 +1,5 @@
 #include "util/file/file_packet_util.h"
 
-#include <QCoreApplication>
-#include <QEventLoop>
-
 #include <chrono>
 
 namespace
@@ -52,8 +49,6 @@ bool FilePacketUtil::waitForChannelBackpressure(const std::shared_ptr<rtc::DataC
                       channel->bufferedAmount());
             return false;
         }
-        if (QCoreApplication::instance())
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
         QThread::msleep(kBackpressureSleepMs);
     }
 

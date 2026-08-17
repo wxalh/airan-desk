@@ -1,6 +1,7 @@
 #include "util/file/stream/file_packet_util_stream_helpers.h"
 
 #include <QFile>
+#include <QCryptographicHash>
 
 #include <cstring>
 
@@ -20,7 +21,8 @@ void writeBigEndian64(rtc::binary &target, size_t offset, quint64 value)
 namespace FilePacketStreamHelpers
 {
 
-QByteArray takeFragmentPayload(QByteArray &dataBuffer, QFile *file)
+QByteArray takeFragmentPayload(QByteArray &dataBuffer, QFile *file,
+                               QCryptographicHash *fileHash)
 {
     QByteArray fragmentPayload;
 
@@ -36,6 +38,8 @@ QByteArray takeFragmentPayload(QByteArray &dataBuffer, QFile *file)
         QByteArray fileData = file->read(PAYLOAD_SIZE - fragmentPayload.size());
         if (fileData.isEmpty())
             break;
+        if (fileHash)
+            fileHash->addData(fileData);
         fragmentPayload.append(fileData);
     }
 

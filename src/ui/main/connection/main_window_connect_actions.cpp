@@ -57,6 +57,7 @@ void MainWindow::on_local_pwd_change_clicked()
                                tr("The new verification code could not be saved. The previous code remains active."));
         return;
     }
+    m_accessPolicyGeneration->fetch_add(1);
     m_localPwdEdit->setText(ConfigUtil->getLocalPwd());
 }
 

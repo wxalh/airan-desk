@@ -22,14 +22,35 @@ void WebRtcCli::onPeerConnectionStateChanged(rtc::PeerConnection::State state)
 
     const bool wasConnected = m_connected;
     m_connected = (state == rtc::PeerConnection::State::Connected);
+    m_peerConnected.store(m_connected);
+    if (m_connected && m_peerStartupTimer)
+        m_peerStartupTimer->stop();
     std::string stateStr;
     if (m_connected)
     {
         stateStr = "Connected";
-        rtc::Candidate local;
-        rtc::Candidate remote;
-        if (m_peerConnection && m_peerConnection->getSelectedCandidatePair(&local, &remote))
-            LOG_DEBUG("Selected candidate pair: local={}, remote={}", std::string(local), std::string(remote));
+        if (m_peerConnection)
+        {
+            const QPointer<WebRtcCli> guard(this);
+            const auto callbackLifetime = m_callbackLifetime;
+            m_peerConnection->querySelectedCandidatePair(
+                [guard, callbackLifetime](bool found, rtc::SelectedCandidatePair pair) {
+                    auto permit = callbackLifetime->tryEnter();
+                    if (!permit || !guard || !found)
+                        return;
+                    guard->m_callbackDispatcher->post([guard, pair]() {
+                        if (!guard || guard->m_destroying)
+                            return;
+                        LOG_DEBUG("Selected candidate pair from stats: localType={}, localProtocol={}, localRelayProtocol={}, remoteType={}, remoteProtocol={}, remoteRelayProtocol={}",
+                                  pair.local.candidateType,
+                                  pair.local.protocol,
+                                  pair.local.relayProtocol,
+                                  pair.remote.candidateType,
+                                  pair.remote.protocol,
+                                  pair.remote.relayProtocol);
+                    });
+                });
+        }
     }
     else if (state == rtc::PeerConnection::State::Connecting)
         stateStr = "Checking";
@@ -105,20 +126,29 @@ void WebRtcCli::onPeerConnectionStateChanged(rtc::PeerConnection::State state)
 
 void WebRtcCli::requestLocalDisconnect()
 {
-    if (!m_disconnectSent)
-    {
-        m_disconnectSent = true;
-        const QJsonObject message = JsonUtil::createObject()
-                                        .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
-                                        .add(Constant::KEY_TYPE, Constant::TYPE_SESSION_DISCONNECT)
-                                        .add(Constant::KEY_SENDER, ConfigUtil->local_id)
-                                        .add(Constant::KEY_RECEIVER, m_remoteId)
-                                        .add(Constant::KEY_SESSION_ID, m_sessionId)
-                                        .add(Constant::KEY_REASON, QStringLiteral("controlled_user"))
-                                        .build();
-        emit sendWsCliTextMsg(JsonUtil::toCompactString(message));
-    }
+    sendSessionDisconnect(QStringLiteral("controlled_user"));
     requestDisconnect(QStringLiteral("controlled_user"));
+}
+
+
+void WebRtcCli::sendSessionDisconnect(const QString &reason)
+{
+    if (m_disconnectSent)
+        return;
+
+    m_disconnectSent = true;
+    const QJsonObject message = JsonUtil::createObject()
+                                    .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                    .add(Constant::KEY_TYPE, Constant::TYPE_SESSION_DISCONNECT)
+                                    .add(Constant::KEY_SENDER, ConfigUtil->local_id)
+                                    .add(Constant::KEY_RECEIVER, m_remoteId)
+                                    .add(Constant::KEY_SESSION_ID, m_sessionId)
+                                    .add(Constant::KEY_REASON,
+                                         reason.trimmed().isEmpty()
+                                             ? QStringLiteral("remote_or_network")
+                                             : reason.trimmed())
+                                    .build();
+    emit sendWsCliTextMsg(JsonUtil::toCompactString(message));
 }
 
 void WebRtcCli::requestDisconnect(const QString &reason)

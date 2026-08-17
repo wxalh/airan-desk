@@ -20,6 +20,12 @@ std::shared_ptr<Track> PeerConnection::addTrack(const Description::Video &desc)
         });
     }
 
+    if (m_closed.load() || !m_pc || !m_factory)
+    {
+        LOG_WARN("Ignoring video track request because PeerConnection is closed or unavailable");
+        return nullptr;
+    }
+
     std::vector<std::string> streamIds{desc.name()};
 
     if (desc.direction() == Description::Direction::RecvOnly)

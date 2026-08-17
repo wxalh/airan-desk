@@ -124,7 +124,14 @@ void Track::close()
         }
         if (m_videoSource)
             m_videoSource->stop();
+        m_sender = nullptr;
+        m_remoteTrack = nullptr;
+        m_videoTrack = nullptr;
+        m_audioTrack = nullptr;
+        m_audioSource = nullptr;
+        m_videoSource = nullptr;
     });
+    m_signalingThread = nullptr;
     LOG_DEBUG("Track closed: mid={}, type={}", m_mid, m_isVideo ? "video" : "audio");
 }
 

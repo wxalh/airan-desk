@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QElapsedTimer>
 
 #if !defined(Q_OS_WIN)
 #include <signal.h>
@@ -56,7 +57,7 @@ QString TerminalSession::defaultShell() const
 }
 
 
-void TerminalSession::start(int cols, int rows)
+void TerminalSession::start(int cols, int rows, const QString &requestedMode)
 {
     stop();
 #if !defined(Q_OS_WIN)
@@ -70,8 +71,24 @@ void TerminalSession::start(int cols, int rows)
     m_windowsUtf8DecodePending.clear();
     m_windowsOutputLogCount = 0;
 #endif
-    const int safeCols = qMax(20, cols);
-    const int safeRows = qMax(5, rows);
+    const int safeCols = qBound(20, cols, 500);
+    const int safeRows = qBound(5, rows, 300);
+    const bool forceFallback = requestedMode.compare(QStringLiteral("fallback"), Qt::CaseInsensitive) == 0;
+    if (forceFallback)
+    {
+        LOG_WARN("Terminal compatibility fallback was requested by the controller");
+        if (startFallbackProcess())
+        {
+            LOG_INFO("Terminal started with pipe compatibility mode");
+            emitTerminalInfo(QStringLiteral("pipe"), true);
+            emit outputReady(QStringLiteral("\r\n[Terminal compatibility mode]\r\n").toUtf8());
+        }
+        else
+        {
+            emit errorOccurred(QStringLiteral("Failed to start compatibility terminal"));
+        }
+        return;
+    }
 #if defined(Q_OS_WIN)
     if (startPty(safeCols, safeRows))
     {
@@ -86,6 +103,10 @@ void TerminalSession::start(int cols, int rows)
         LOG_INFO("Terminal started with Windows pipe fallback mode");
         emitTerminalInfo(QStringLiteral("pipe"), true);
         emit outputReady(QStringLiteral("\r\n[Windows 7 compatibility terminal]\r\n").toUtf8());
+    }
+    else
+    {
+        emit errorOccurred(QStringLiteral("Failed to start Windows terminal"));
     }
 #else
     m_pendingInput.clear();
@@ -145,25 +166,34 @@ void TerminalSession::emitClosedOnce(int exitCode)
 
 void TerminalSession::stop()
 {
+    QElapsedTimer stopTimer;
+    stopTimer.start();
     m_stopping.store(true);
     m_closedEmitted.store(true);
     m_outputPaused.store(false);
     if (m_process)
     {
-        m_process->terminate();
-        if (!m_process->waitForFinished(1000))
-            m_process->kill();
-        m_process->deleteLater();
+        QProcess *process = m_process;
         m_process = nullptr;
+        m_usingFallbackProcess = false;
+        disconnect(process, nullptr, this, nullptr);
+        process->terminate();
+        if (!process->waitForFinished(1000))
+        {
+            process->kill();
+            process->waitForFinished(1000);
+        }
+        process->deleteLater();
     }
-    m_usingFallbackProcess = false;
 
 #if defined(Q_OS_WIN)
     if (m_windowsInputFlushTimer)
         m_windowsInputFlushTimer->stop();
     m_windowsPendingInput.clear();
     closeConPty();
+    m_usingFallbackProcess = false;
 #else
+    m_usingFallbackProcess = false;
     if (m_notifier)
     {
         m_notifier->setEnabled(false);
@@ -188,6 +218,8 @@ void TerminalSession::stop()
         reapChildProcessNonBlocking();
     }
 #endif
+    if (stopTimer.elapsed() >= 100)
+        LOG_WARN("Terminal stop took {} ms", stopTimer.elapsed());
+    else
+        LOG_DEBUG("Terminal stop completed in {} ms", stopTimer.elapsed());
 }
-
-

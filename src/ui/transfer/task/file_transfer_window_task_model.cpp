@@ -2,11 +2,8 @@
 #include "ui/transfer/task/transfer_batch_progress.h"
 
 #include <QDir>
-#include <QDirIterator>
 #include <QFileInfo>
 #include <QUuid>
-
-#include <limits>
 
 QString FileTransferWindow::createTransferId() const
 {
@@ -32,26 +29,7 @@ qint64 FileTransferWindow::collectDirectoryStats(const QString &path, int *fileC
             *fileCount = 1;
         return info.size();
     }
-
-    qint64 totalBytes = 0;
-    int totalFiles = 0;
-    QDirIterator it(path,
-                    QDir::Files | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext())
-    {
-        QFileInfo fileInfo(it.next());
-        const qint64 fileSize = qMax<qint64>(0, fileInfo.size());
-        totalBytes = totalBytes <= (std::numeric_limits<qint64>::max)() - fileSize
-                         ? totalBytes + fileSize
-                         : (std::numeric_limits<qint64>::max)();
-        if (totalFiles < (std::numeric_limits<int>::max)())
-            ++totalFiles;
-    }
-
-    if (fileCount)
-        *fileCount = totalFiles;
-    return totalBytes;
+    return 0;
 }
 
 

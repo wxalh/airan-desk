@@ -3,6 +3,8 @@
 #include "common/logger_manager.h"
 
 #include <functional>
+#include <algorithm>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -13,9 +15,15 @@ namespace rtc
 
 void PeerConnection::close()
 {
+    const auto closeStarted = std::chrono::steady_clock::now();
     if (m_signalingThread && !m_signalingThread->IsQuitting() && !m_signalingThread->IsCurrent())
     {
         m_signalingThread->BlockingCall([this]() { close(); });
+        const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now() - closeStarted)
+                                   .count();
+        if (elapsedMs >= 100)
+            LOG_WARN("PeerConnection close signaling handoff took {} ms", elapsedMs);
         return;
     }
     if (m_closed.exchange(true))
@@ -34,6 +42,13 @@ void PeerConnection::close()
     if (m_pc)
         m_pc->Close();
     m_pc = nullptr;
+    const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - closeStarted)
+                               .count();
+    if (elapsedMs >= 100)
+        LOG_WARN("PeerConnection close took {} ms", elapsedMs);
+    else
+        LOG_DEBUG("PeerConnection close completed in {} ms", elapsedMs);
 }
 
 
@@ -42,6 +57,19 @@ void PeerConnection::queryMediaStats(std::function<void(MediaStats)> cb)
     if (!m_pc || m_closed.load())
         return;
     auto collector = createMediaStatsCollector(std::move(cb));
+    m_pc->GetStats(collector.get());
+}
+
+
+void PeerConnection::querySelectedCandidatePair(std::function<void(bool, SelectedCandidatePair)> cb)
+{
+    if (!m_pc || m_closed.load())
+    {
+        if (cb)
+            cb(false, SelectedCandidatePair());
+        return;
+    }
+    auto collector = createSelectedCandidatePairCollector(std::move(cb));
     m_pc->GetStats(collector.get());
 }
 
@@ -56,6 +84,15 @@ void PeerConnection::resetCallbacks()
     m_onLocalCandidate = nullptr;
     m_onTrack = nullptr;
     m_onDataChannel = nullptr;
+}
+
+void PeerConnection::pruneClosedDataChannels()
+{
+    m_channels.erase(std::remove_if(m_channels.begin(), m_channels.end(),
+                                    [](const std::shared_ptr<DataChannel> &channel) {
+                                        return !channel || channel->isClosed();
+                                    }),
+                     m_channels.end());
 }
 
 void PeerConnection::onStateChange(std::function<void(State)> cb)

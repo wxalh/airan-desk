@@ -6,10 +6,58 @@
 
 #include <QDateTime>
 #include <QMetaObject>
+#include <QMutexLocker>
 
 namespace
 {
 constexpr size_t kMaxInputChannelMessageBytes = 1024 * 1024;
+}
+
+
+void WebRtcCli::enqueueInputMoveMessage(const QJsonObject &object)
+{
+    if (m_shutdownStarted.load())
+        return;
+
+    bool scheduleDrain = false;
+    {
+        QMutexLocker locker(&m_inputMoveIngressMutex);
+        if (m_shutdownStarted.load())
+            return;
+        m_pendingInputMoveMessage = object;
+        m_pendingInputMoveBoundary = m_pendingInputMoveBoundary ||
+                                     JsonUtil::getBool(object, Constant::KEY_MOVE_BOUNDARY, false);
+        if (m_pendingInputMoveBoundary)
+            m_pendingInputMoveMessage.insert(Constant::KEY_MOVE_BOUNDARY, true);
+        if (!m_inputMoveIngressScheduled)
+        {
+            m_inputMoveIngressScheduled = true;
+            scheduleDrain = true;
+        }
+    }
+
+    if (scheduleDrain &&
+        !QMetaObject::invokeMethod(this, "drainInputMoveMessage", Qt::QueuedConnection))
+    {
+        QMutexLocker locker(&m_inputMoveIngressMutex);
+        m_inputMoveIngressScheduled = false;
+    }
+}
+
+
+void WebRtcCli::drainInputMoveMessage()
+{
+    QJsonObject object;
+    {
+        QMutexLocker locker(&m_inputMoveIngressMutex);
+        object = std::move(m_pendingInputMoveMessage);
+        m_pendingInputMoveMessage = QJsonObject();
+        m_pendingInputMoveBoundary = false;
+        m_inputMoveIngressScheduled = false;
+    }
+
+    if (!m_shutdownStarted.load() && !object.isEmpty())
+        parseInputMsgIfAlive(object);
 }
 
 
@@ -50,6 +98,7 @@ void WebRtcCli::onInputChannelOpen()
     if (m_inputChannelRecoverTimer)
         QMetaObject::invokeMethod(m_inputChannelRecoverTimer, "stop", Qt::QueuedConnection);
     LOG_INFO("Input channel opened");
+    flushPendingInputMessages();
     QMetaObject::invokeMethod(this, "notifyCurrentStreamConfig", Qt::QueuedConnection);
     QMetaObject::invokeMethod(this, "notifyDesktopState", Qt::QueuedConnection);
 }
@@ -83,6 +132,11 @@ void WebRtcCli::onInputChannelMessage(rtc::message_variant data)
         {
             parseInputMsg(object);
         }
+        else if (JsonUtil::getString(object, Constant::KEY_MSGTYPE) == Constant::TYPE_MOUSE &&
+                 JsonUtil::getString(object, Constant::KEY_DWFLAGS) == Constant::KEY_MOVE)
+        {
+            enqueueInputMoveMessage(object);
+        }
         else
         {
             QMetaObject::invokeMethod(this, "parseInputMsgIfAlive", Qt::QueuedConnection,
@@ -103,7 +157,8 @@ void WebRtcCli::onInputChannelError(std::string error)
     }
 
     LOG_ERROR("Input channel error: {}", error);
-    scheduleInputChannelRecovery(QString::fromStdString(error));
+    m_disconnectReason = QStringLiteral("input_channel_error");
+    emit destroyCli();
 }
 
 
@@ -118,13 +173,11 @@ void WebRtcCli::onInputChannelClosed()
     }
 
     LOG_INFO("Input channel closed");
-    if (m_inputChannelRecoverTimer)
-        m_inputChannelRecoverTimer->stop();
-
     if (!m_destroying && !m_isOnlyFile)
     {
         LOG_INFO("Input channel closed by control side, stopping media capture and destroying controlled session");
-        stopMediaCapture();
+        m_disconnectReason = QStringLiteral("input_channel_closed");
+        emit destroyCli();
     }
 }
 

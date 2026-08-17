@@ -22,7 +22,7 @@ git submodule update --init --recursive
 Select the exact self-contained package for the build target. The preparation
 scripts download `libwebrtc-manifest.json` from the latest immutable release,
 resolve one asset, and verify its declared size and SHA-256 before replacing
-`third_party/webrtc`:
+the shared `third_party/webrtc` directory:
 
 ```powershell
 ./tools/prepare_third_party.ps1 -PackageSet windows -WebrtcPackage windows-win10-x64-m144-md
@@ -63,11 +63,12 @@ ship `WebRTC-LICENSE.txt`, `WebRTC-PATENTS.txt`, and the platform-slice-generate
 `WebRTC-Third-Party-Licenses.txt`. The build scripts come from
 <https://github.com/wxalh/libwebrtc_build>.
 
-Each selected slice provides its actual `args.gn`, package-level
-`.airan-package-sha256`, and exact `source_revision.txt`. The build copies this
-target-specific metadata into the release directory; together with the static
-library, these files record the monolithic WebRTC slice's
-H.264/FFmpeg/OpenH264 capabilities.
+Each selected slice provides its actual `args.gn`, exact `source_revision.txt`,
+and `PACKAGE-METADATA.json`. The preparation scripts verify archive size and
+SHA-256 against `libwebrtc-manifest.json` only while downloading. Extraction
+cache markers are not part of the WebRTC package interface and are not required
+by CMake or release packaging. The build copies the selected slice's build
+arguments and source revision into the release directory.
 
 ## FFmpeg shared/dev Package
 

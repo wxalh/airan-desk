@@ -11,6 +11,8 @@
 
 namespace
 {
+constexpr int kPeerStartupTimeoutMs = 15000;
+
 /*
  * Constrains automatic remote desktop resolution to the control side's visible area.
  */
@@ -58,6 +60,8 @@ WebRtcCtl::WebRtcCtl(const QString &remoteId, const QString &remotePwdMd5,
     connectFilePacketUtilSignals();
 
     m_reconnectTimer = new QTimer(this);
+    m_peerStartupTimer = new QTimer(this);
+    m_peerStartupTimer->setSingleShot(true);
     m_controlHeartbeatTimer = new QTimer(this);
     m_sessionHeartbeatTimer = new QTimer(this);
     m_inputMoveFlushTimer = new QTimer(this);
@@ -65,6 +69,7 @@ WebRtcCtl::WebRtcCtl(const QString &remoteId, const QString &remotePwdMd5,
     m_inputMoveFlushTimer->setSingleShot(true);
     m_inputMoveTailTimer->setSingleShot(true);
     connect(m_reconnectTimer, &QTimer::timeout, this, &WebRtcCtl::doReconnect);
+    connect(m_peerStartupTimer, &QTimer::timeout, this, &WebRtcCtl::onPeerStartupTimeout);
     connect(m_controlHeartbeatTimer, &QTimer::timeout, this, &WebRtcCtl::sendControlHeartbeat);
     connect(m_sessionHeartbeatTimer, &QTimer::timeout, this, &WebRtcCtl::pollSessionHeartbeat);
     connect(m_inputMoveFlushTimer, &QTimer::timeout, this, &WebRtcCtl::flushPendingInputMove);
@@ -105,14 +110,22 @@ void WebRtcCtl::performShutdown()
     if (m_shutdownDone)
         return;
 
+    m_shutdownRequested.store(true);
     LOG_DEBUG("WebRtcCtl shutdown");
     m_shutdownDone = true;
+    ++m_networkPathReconnectGeneration;
+    m_pendingNetworkPathReconnect.clear();
     disableReconnect();
     if (m_controlHeartbeatTimer)
         m_controlHeartbeatTimer->stop();
     if (m_sessionHeartbeatTimer)
         m_sessionHeartbeatTimer->stop();
     destroy();
+}
+
+void WebRtcCtl::requestShutdown()
+{
+    m_shutdownRequested.store(true);
 }
 
 void WebRtcCtl::shutdown()
@@ -132,9 +145,11 @@ void WebRtcCtl::shutdownAndMoveToOwnerThread(QObject *owner)
 
 void WebRtcCtl::init()
 {
-    if (m_shutdownDone)
+    if (m_shutdownRequested.load() || m_shutdownDone)
         return;
     m_shutdownStarted.store(false);
+    m_disconnectSent = false;
+    m_remoteDisconnectReceived = false;
     m_callbackLifetime = std::make_shared<CallbackLifetime>();
     m_heartbeatNegotiated.store(false);
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -204,4 +219,16 @@ void WebRtcCtl::init()
     emit connectionStatusChanged(tr("Connection request sent to remote"));
     QString message = JsonUtil::toCompactString(connectMsg);
     emit sendWsCliTextMsg(message);
+    if (m_peerStartupTimer && !m_connected)
+        m_peerStartupTimer->start(kPeerStartupTimeoutMs);
+}
+
+
+void WebRtcCtl::onPeerStartupTimeout()
+{
+    if (m_shutdownStarted.load() || m_connected || !m_peerConnection)
+        return;
+
+    LOG_WARN("Control PeerConnection startup timed out before reaching connected; scheduling reconnect");
+    requestSessionReconnect(tr("WebRTC startup timed out, reconnecting..."));
 }

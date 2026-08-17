@@ -631,10 +631,6 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</source>
         <translation>创建目标目录失败：%1</translation>
     </message>
     <message>
-        <source>Failed to remove existing target file: %1</source>
-        <translation>删除现有目标文件失败：%1</translation>
-    </message>
-    <message>
         <source>Failed to create target file: %1 (%2)</source>
         <translation>创建目标文件失败：%1（%2）</translation>
     </message>
@@ -902,6 +898,16 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</source>
     <message>
         <source>The remote device closed this connection.</source>
         <translation>被控端已关闭此连接。</translation>
+    </message>
+    <message>
+        <source>File list failed</source>
+        <translation>文件列表失败</translation>
+    </message>
+    <message>
+        <source>Failed to list remote directory:
+%1</source>
+        <translation>列出远程目录失败：
+%1</translation>
     </message>
 </context>
 <context>
@@ -2110,6 +2116,16 @@ Verification code: %3</source>
         <source>Transfer failed: %1</source>
         <translation>传输失败：%1</translation>
     </message>
+    <message>
+        <source>File list failed</source>
+        <translation>文件列表失败</translation>
+    </message>
+    <message>
+        <source>Failed to list remote directory:
+%1</source>
+        <translation>列出远程目录失败：
+%1</translation>
+    </message>
 </context>
 <context>
     <name>TerminalWindow</name>
@@ -2176,6 +2192,14 @@ Verification code: %3</source>
     <message>
         <source>The remote device closed this connection.</source>
         <translation>被控端已关闭此连接。</translation>
+    </message>
+    <message>
+        <source>[Terminal startup timed out; retrying in compatibility mode...]</source>
+        <translation>[终端启动超时，正在使用兼容模式重试...]</translation>
+    </message>
+    <message>
+        <source>[Terminal failed to start after compatibility fallback]</source>
+        <translation>[兼容模式回退后终端仍未能启动]</translation>
     </message>
 </context>
 <context>
@@ -2374,6 +2398,14 @@ Verification code: %3</source>
     <message>
         <source>Failed to queue clipboard stream read request.</source>
         <translation>无法将剪贴板流读取请求加入队列。</translation>
+    </message>
+    <message>
+        <source>Remote directory is unavailable or not readable.</source>
+        <translation>远程目录不可用或无法读取。</translation>
+    </message>
+    <message>
+        <source>Directory contains too many entries to display safely.</source>
+        <translation>目录项目过多，无法安全显示。</translation>
     </message>
 </context>
 <context>
@@ -2653,6 +2685,58 @@ Verification code: %3</source>
     <message>
         <source>Failed to queue clipboard stream read request.</source>
         <translation>无法将剪贴板流读取请求加入队列。</translation>
+    </message>
+    <message>
+        <source>File control message is too large, reconnecting...</source>
+        <translation>文件控制消息过大，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>File control queue is full, reconnecting...</source>
+        <translation>文件控制队列已满，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>Clipboard channel closed, reconnecting...</source>
+        <translation>剪贴板通道已关闭，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>Clipboard channel error, reconnecting...</source>
+        <translation>剪贴板通道出错，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>Clipboard control queue is full, reconnecting...</source>
+        <translation>剪贴板控制队列已满，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>File channel closed, reconnecting...</source>
+        <translation>文件通道已关闭，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>File channel failed, reconnecting...</source>
+        <translation>文件通道出错，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>File control channel closed, reconnecting...</source>
+        <translation>文件控制通道已关闭，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>File control channel failed, reconnecting...</source>
+        <translation>文件控制通道出错，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>Too many pending upload requests.</source>
+        <translation>待处理的上传请求过多。</translation>
+    </message>
+    <message>
+        <source>Input control queue is full, reconnecting...</source>
+        <translation>输入控制队列已满，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>Session heartbeat channel closed, reconnecting...</source>
+        <translation>会话心跳通道已关闭，正在重新连接...</translation>
+    </message>
+    <message>
+        <source>ICE candidate queue is full, reconnecting...</source>
+        <translation>ICE 候选队列已满，正在重新连接...</translation>
     </message>
 </context>
 <context>

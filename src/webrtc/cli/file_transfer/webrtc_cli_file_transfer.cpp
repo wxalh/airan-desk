@@ -5,7 +5,6 @@
 
 #include <QDir>
 #include <QDirIterator>
-
 #include <limits>
 
 namespace
@@ -86,7 +85,8 @@ void WebRtcCli::sendTransferCancel(const QString &transferId)
 }
 
 
-qint64 WebRtcCli::collectDirectoryStats(const QString &path, int *fileCount) const
+qint64 WebRtcCli::collectDirectoryStats(const QString &path, int *fileCount,
+                                        const QString &transferId) const
 {
     if (fileCount)
         *fileCount = 0;
@@ -109,6 +109,12 @@ qint64 WebRtcCli::collectDirectoryStats(const QString &path, int *fileCount) con
                     QDirIterator::Subdirectories);
     while (it.hasNext())
     {
+        if ((totalFiles & 0xff) == 0)
+        {
+            if (m_shutdownRequested.load() || m_shutdownStarted.load() ||
+                isTransferCancelled(transferId))
+                return -1;
+        }
         QFileInfo fileInfo(it.next());
         const qint64 fileSize = qMax<qint64>(0, fileInfo.size());
         totalBytes = totalBytes <= (std::numeric_limits<qint64>::max)() - fileSize
@@ -117,6 +123,9 @@ qint64 WebRtcCli::collectDirectoryStats(const QString &path, int *fileCount) con
         if (totalFiles < (std::numeric_limits<int>::max)())
             ++totalFiles;
     }
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() ||
+        isTransferCancelled(transferId))
+        return -1;
     if (fileCount)
         *fileCount = totalFiles;
     return totalBytes;

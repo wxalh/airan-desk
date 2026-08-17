@@ -7,9 +7,13 @@ FilePacketUtil::FilePacketUtil(QObject *parent)
 
 FilePacketUtil::~FilePacketUtil()
 {
+    clearPendingReassemblies();
+}
+
+void FilePacketUtil::clearPendingReassemblies()
+{
     QMutexLocker locker(&m_reassemblyMutex);
 
-    
     for (auto& pair : m_reassemblyBuffers) {
         if (pair.second.tempFile) {
             pair.second.tempFile->close();

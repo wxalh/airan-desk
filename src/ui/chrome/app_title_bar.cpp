@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QTimer>
 
 
 AppTitleBar::AppTitleBar(QWidget *targetWindow, bool showMinimize, bool showMaximize, QWidget *parent)
@@ -14,8 +15,19 @@ AppTitleBar::AppTitleBar(QWidget *targetWindow, bool showMinimize, bool showMaxi
 {
     setObjectName(QStringLiteral("appTitleBar"));
     setAttribute(Qt::WA_StyledBackground, true);
+    setAttribute(Qt::WA_Hover, true);
+    setMouseTracking(true);
     setFixedHeight(38);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    enableAncestorMouseTracking();
+
+    if (m_targetWindow)
+    {
+        m_targetWindow->setAttribute(Qt::WA_Hover, true);
+        m_targetWindow->setMouseTracking(true);
+        m_targetWindow->installEventFilter(this);
+    }
 
     m_layout = new QHBoxLayout(this);
     m_layout->setContentsMargins(14, 0, 8, 0);
@@ -39,6 +51,7 @@ AppTitleBar::AppTitleBar(QWidget *targetWindow, bool showMinimize, bool showMaxi
     if (showMinimize)
     {
         m_minimizeButton = createButton(makeTitleBarIcon(TitleBarGlyph::Minimize), tr("Minimize"));
+        m_minimizeButton->setObjectName(QStringLiteral("appTitleBarMinimize"));
         connect(m_minimizeButton, &QPushButton::clicked, m_targetWindow, &QWidget::showMinimized);
         m_layout->addWidget(m_minimizeButton);
     }
@@ -46,6 +59,7 @@ AppTitleBar::AppTitleBar(QWidget *targetWindow, bool showMinimize, bool showMaxi
     if (showMaximize)
     {
         m_maximizeButton = createButton(makeTitleBarIcon(TitleBarGlyph::Maximize), tr("Maximize"));
+        m_maximizeButton->setObjectName(QStringLiteral("appTitleBarMaximize"));
         connect(m_maximizeButton, &QPushButton::clicked, this, &AppTitleBar::toggleMaximize);
         m_layout->addWidget(m_maximizeButton);
     }
@@ -62,12 +76,22 @@ AppTitleBar::AppTitleBar(QWidget *targetWindow, bool showMinimize, bool showMaxi
         connect(m_targetWindow, &QWidget::windowTitleChanged, this, &AppTitleBar::setTitle);
         qApp->installEventFilter(this);
     }
+
+    // Some Windows/Qt combinations do not deliver hover moves to an
+    // inactive frameless window until it receives focus. Polling the live
+    // cursor keeps title-bar feedback independent of the activation state.
+    m_hoverTimer = new QTimer(this);
+    m_hoverTimer->setInterval(80);
+    connect(m_hoverTimer, &QTimer::timeout, this, &AppTitleBar::syncButtonHoverFromCursor);
+    m_hoverTimer->start();
     updateMaximizeButton();
 }
 
 
 AppTitleBar::~AppTitleBar()
 {
+    if (m_targetWindow)
+        m_targetWindow->removeEventFilter(this);
     if (qApp)
         qApp->removeEventFilter(this);
 }
@@ -94,6 +118,13 @@ bool AppTitleBar::event(QEvent *event)
 
     switch (event->type())
     {
+    case QEvent::ParentChange:
+    case QEvent::Show:
+        // The title bar is initially constructed with the window as parent,
+        // then reparented by titleBarHost's layout. Refresh the live chain
+        // after that reparent so the host does not swallow hover movement.
+        enableAncestorMouseTracking();
+        break;
     case QEvent::ApplicationFontChange:
     case QEvent::ScreenChangeInternal:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -105,4 +136,19 @@ bool AppTitleBar::event(QEvent *event)
         break;
     }
     return handled;
+}
+
+
+void AppTitleBar::enableAncestorMouseTracking()
+{
+    // Frameless windows do not get a native title bar to drive mouse
+    // tracking. Keep every intermediate container producing hover/move
+    // events even when the target window is inactive.
+    for (QWidget *widget = this; widget; widget = widget->parentWidget())
+    {
+        widget->setAttribute(Qt::WA_Hover, true);
+        widget->setMouseTracking(true);
+        if (widget == m_targetWindow)
+            break;
+    }
 }

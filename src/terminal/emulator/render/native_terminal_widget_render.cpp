@@ -96,7 +96,7 @@ void NativeTerminalWidget::paintEvent(QPaintEvent *event)
 
     if (m_scrollbackOffset == 0 && hasFocus() && m_cursorVisible && m_cursorBlinkState)
     {
-        const QRect cursorRect(m_cursorPos.col * m_cellWidth, m_cursorPos.row * m_cellHeight, m_cellWidth, m_cellHeight);
+        const QRect cursorRect = cursorPaintRect();
         if (m_cursorShape == VTERM_PROP_CURSORSHAPE_UNDERLINE)
         {
             painter.fillRect(QRect(cursorRect.left(), cursorRect.bottom() - 2, cursorRect.width(), 3), kCursorColor);
@@ -110,9 +110,6 @@ void NativeTerminalWidget::paintEvent(QPaintEvent *event)
             VTermScreenCell cursorCell{};
             const bool hasCursorCell = visibleCell(m_cursorPos.row, m_cursorPos.col, &cursorCell) &&
                                        !isWideCharTrailingCell(cursorCell);
-            const int cursorWidth = hasCursorCell ? qMax(1, static_cast<int>(cursorCell.width)) : 1;
-            const QRect blockCursorRect(cursorRect.left(), cursorRect.top(),
-                                        cursorRect.width() * cursorWidth, cursorRect.height());
             QColor cursorTextColor = kDefaultBackground;
             if (hasCursorCell)
             {
@@ -123,14 +120,27 @@ void NativeTerminalWidget::paintEvent(QPaintEvent *event)
                 cursorTextColor = cellBackground;
             }
 
-            painter.fillRect(blockCursorRect, kCursorColor);
+            painter.fillRect(cursorRect, kCursorColor);
             if (hasCursorCell && !cursorCell.attrs.conceal)
             {
-                drawCellText(painter, blockCursorRect, m_ascent, cellText(cursorCell),
+                drawCellText(painter, cursorRect, m_ascent, cellText(cursorCell),
                              fontForCell(m_font, cursorCell), cursorTextColor);
             }
         }
     }
+}
+
+
+QRect NativeTerminalWidget::cursorPaintRect() const
+{
+    VTermScreenCell cursorCell{};
+    const bool hasCursorCell = visibleCell(m_cursorPos.row, m_cursorPos.col, &cursorCell) &&
+                               !isWideCharTrailingCell(cursorCell);
+    const int cursorWidth = hasCursorCell ? qMax(1, static_cast<int>(cursorCell.width)) : 1;
+    return QRect(m_cursorPos.col * m_cellWidth,
+                 m_cursorPos.row * m_cellHeight,
+                 m_cellWidth * cursorWidth,
+                 m_cellHeight);
 }
 
 

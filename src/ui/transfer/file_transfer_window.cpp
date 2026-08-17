@@ -49,6 +49,8 @@ void FileTransferWindow::beginAsyncShutdown()
     if (m_closing.exchange(true))
         return;
     connected = false;
+    m_pendingFileListRequestId.clear();
+    m_pendingFileListRequestPath.clear();
     hide();
     if (m_ws)
     {
@@ -56,6 +58,7 @@ void FileTransferWindow::beginAsyncShutdown()
     }
     disconnect(this, nullptr, &m_rtc_ctl, nullptr);
     disconnect(&m_rtc_ctl, nullptr, this, nullptr);
+    m_rtc_ctl.requestShutdown();
     if (m_rtc_ctl_thread.isRunning())
     {
         QMetaObject::invokeMethod(&m_rtc_ctl,

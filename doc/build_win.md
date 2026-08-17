@@ -29,7 +29,7 @@ Windows 构建使用 MSVC Qt、Google WebRTC 静态包、可选 FFmpeg shared/de
 - CMake 3.21+。
 - Git。
 - Windows 10 x64 和 Windows 7 x86 使用 Qt 5 MSVC 包；Windows 10 arm64 使用 Qt 6.8.3 MSVC arm64 包。Windows 7 x86 可使用 Qt 5.9.x/5.15.x 的 MSVC x86 包。
-- `third_party/webrtc` 已解压当前项目使用的 Google WebRTC 静态包。
+- `third_party/webrtc` 已解压与目标平台、架构和运行库匹配的 Google WebRTC 静态包。
 - 可选：`third_party/ffmpeg-builds/<package>` 和 OpenSSL 运行时。
 
 ## 准备源码
@@ -118,7 +118,7 @@ out/build/<configure-preset>/debug/airan-desk.exe
 - `translations/`，Qt 系统翻译，找到时复制。
 - FFmpeg DLL，默认在依赖包存在时复制；正式打包要求后端启用并同时提供完整 LGPL 和对应源码材料。
 - `licenses/Cisco-OpenH264-BINARY_LICENSE.txt` 许可证文本；Airan-Desk 不复制 Cisco OpenH264 二进制，用户必须另行从 Cisco 获取并自行启停。
-- `licenses/WebRTC-args.gn`、`licenses/WebRTC-package.sha256` 和 `licenses/WebRTC-source-revision.txt` 来自实际选中的 slice。当前 m144 slice 记录 `rtc_use_h264=false`。
+- `licenses/WebRTC-args.gn` 和 `licenses/WebRTC-source-revision.txt` 来自实际选中的 slice。当前 m144 slice 记录 `rtc_use_h264=false`。
 - OpenSSL DLL，找到时复制。
 
 不会部署 WebRTC DLL，因为当前 WebRTC 静态链接。

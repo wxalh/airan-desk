@@ -67,6 +67,10 @@ void AppTitleBar::applyScale()
 QPushButton *AppTitleBar::createButton(const QIcon &icon, const QString &tooltip)
 {
     auto *button = new QPushButton(this);
+    button->setAttribute(Qt::WA_Hover, true);
+    button->setMouseTracking(true);
+    button->installEventFilter(this);
+    button->setProperty("titleBarHover", false);
     button->setIcon(icon);
     button->setIconSize(QSize(12, 12));
     button->setFocusPolicy(Qt::NoFocus);
@@ -109,7 +113,13 @@ void AppTitleBar::applyStyle()
         "#appTitleBarTitle { color: rgb(131,193,224); font-weight: 600; }"
         "QPushButton { background: transparent; border: none; color: rgb(131,193,224);"
         "              border-radius: 4px; padding: 0; }"
-        "QPushButton:hover { background: #2a2a2a; color: white; }"
-        "QPushButton:pressed { background: #3a3a3a; color: white; }"
-        "#appTitleBarClose:hover { background: #b23b4c; color: white; }"));
+        "QPushButton:hover { background: #3a3a3a; color: white; }"
+        "QPushButton:pressed { background: #4a4a4a; color: white; }"
+        "#appTitleBarMinimize:hover, #appTitleBarMaximize:hover { background: #3a3a3a; color: white; }"
+        "#appTitleBar #appTitleBarMinimize[titleBarHover=\"true\"],"
+        "#appTitleBar #appTitleBarMaximize[titleBarHover=\"true\"] { background: #3a3a3a; color: white; }"
+        "#appTitleBarMinimize:pressed, #appTitleBarMaximize:pressed { background: #4a4a4a; color: white; }"
+        "#appTitleBarClose:hover { background: #c84456; color: white; }"
+        "#appTitleBar #appTitleBarClose[titleBarHover=\"true\"] { background: #c84456; color: white; }"
+        "#appTitleBarClose:pressed { background: #a83242; color: white; }"));
 }

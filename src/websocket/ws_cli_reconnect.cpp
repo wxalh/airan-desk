@@ -73,6 +73,25 @@ void WsCli::attemptReconnect()
         return;
     }
 
+    if (m_ws)
+    {
+        const auto socketState = m_ws->state();
+        if (socketState == QAbstractSocket::HostLookupState ||
+            socketState == QAbstractSocket::ConnectingState)
+        {
+            LOG_DEBUG("Reconnect attempt skipped because the WebSocket handshake is already in flight");
+            m_reconnect_followup_timer->start(1000);
+            return;
+        }
+        if (socketState != QAbstractSocket::UnconnectedState)
+        {
+            LOG_DEBUG("Reconnect attempt skipped because the WebSocket is changing state: {}",
+                      static_cast<int>(socketState));
+            m_reconnect_followup_timer->start(1000);
+            return;
+        }
+    }
+
     ++m_reconnect_count;
 
     LOG_INFO("Attempting reconnect (phase: {}, attempt: {})", m_reconnect_phase, m_reconnect_count);
@@ -82,7 +101,8 @@ void WsCli::attemptReconnect()
 
     if (m_ws)
     {
-    LOG_DEBUG("Calling m_ws->open() to reconnect");
+        LOG_DEBUG("Calling m_ws->open() to reconnect");
+        m_socketConnectTimer.start();
         m_ws->open(m_url);
     }
     else
@@ -122,6 +142,34 @@ void WsCli::scheduleNextReconnectIfNeeded()
     }
     if (!m_connected)
     {
+        if (m_ws)
+        {
+            const auto socketState = m_ws->state();
+            if (socketState == QAbstractSocket::HostLookupState ||
+                socketState == QAbstractSocket::ConnectingState)
+            {
+                if (m_socketConnectTimer.isValid() &&
+                    m_socketConnectTimer.elapsed() >= 10000)
+                {
+                    LOG_WARN("WebSocket handshake remained in progress for {} ms; aborting and scheduling a fresh reconnect",
+                             m_socketConnectTimer.elapsed());
+                    m_socketConnectTimer.invalidate();
+                    m_ws->abort();
+                    scheduleReconnect();
+                    return;
+                }
+                // Do not call open() again while Qt is still completing the
+                // current handshake. Keep polling until it connects or emits
+                // disconnected; the latter schedules a fresh attempt.
+                m_reconnect_followup_timer->start(1000);
+                return;
+            }
+            if (socketState != QAbstractSocket::UnconnectedState)
+            {
+                m_reconnect_followup_timer->start(1000);
+                return;
+            }
+        }
         LOG_DEBUG("Still not connected, scheduling next reconnect");
         scheduleReconnect();
     }

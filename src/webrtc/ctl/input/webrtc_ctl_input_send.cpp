@@ -58,6 +58,9 @@ bool WebRtcCtl::sendInputChannelNow(const rtc::message_variant &data,
                                     bool isMouseMove,
                                     bool reliableBoundary)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return false;
+
     std::shared_ptr<rtc::DataChannel> channel = m_inputChannel;
     if (isMouseMove && !reliableBoundary && m_inputMoveChannel && m_inputMoveChannel->isOpen())
         channel = m_inputMoveChannel;
@@ -169,6 +172,9 @@ void WebRtcCtl::resetInputMoveBurst()
 
 void WebRtcCtl::inputChannelSendMsg(const rtc::message_variant &data)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     LOG_TRACE("inputChannelSendMsg called - connected: {}, inputChannel: {}, isOpen: {}",
               m_connected,
               (m_inputChannel != nullptr),
@@ -201,7 +207,8 @@ void WebRtcCtl::inputChannelSendMsg(const rtc::message_variant &data)
         }
 
         finishInputMoveBurst();
-        sendInputChannelNow(data, false, true);
+        if (!sendInputControlMessage(data))
+            LOG_TRACE("Reliable input message queued because the input channel rejected it");
     }
     else
     {
@@ -215,6 +222,8 @@ void WebRtcCtl::inputChannelSendMsg(const rtc::message_variant &data)
                 m_mouseMovePolicy.markBoundaryFailed(dispatch.sequence);
         }
         suspendInputMoveBurst();
+        if (!mouseInfo.has_value() || !mouseInfo->isMove)
+            queueInputControlMessage(data);
         scheduleReconnect();
 
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();

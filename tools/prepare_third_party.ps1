@@ -14,8 +14,6 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $DownloadDir = Join-Path $RepoRoot "third_party/_downloads"
 $WebrtcDir = Join-Path $RepoRoot "third_party/webrtc"
 $FfmpegDir = Join-Path $RepoRoot "third_party/ffmpeg-builds"
-$WebrtcMarker = Join-Path $WebrtcDir ".airan-package-sha256"
-$WebrtcIdentityMarker = Join-Path $WebrtcDir ".airan-package-id"
 $RunningOnWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
     [System.Runtime.InteropServices.OSPlatform]::Windows)
 
@@ -269,14 +267,20 @@ function Test-WebrtcArchive([string]$ArchivePath, [string]$ExpectedSha256, [Int6
     return $true
 }
 
-function Test-WebrtcPreparedMatches([string]$ExpectedSha256) {
+function Test-WebrtcPreparedMatches {
     if (-not (Test-WebrtcReady)) {
         return $false
     }
-    return (Test-Path $WebrtcMarker) -and
-        (Test-Path $WebrtcIdentityMarker) -and
-        ((Get-Content -Raw $WebrtcMarker).Trim() -eq $ExpectedSha256) -and
-        ((Get-Content -Raw $WebrtcIdentityMarker).Trim() -eq $WebrtcPackage)
+    $metadataPath = Join-Path $WebrtcDir "PACKAGE-METADATA.json"
+    if (-not (Test-Path -LiteralPath $metadataPath)) {
+        return $false
+    }
+    try {
+        $metadata = Get-Content -Raw -LiteralPath $metadataPath | ConvertFrom-Json
+        return [string]$metadata.package -eq $WebrtcPackage
+    } catch {
+        return $false
+    }
 }
 
 function Expand-Webrtc([string]$ArchivePath, [string]$ExpectedSha256, [Int64]$ExpectedSize) {
@@ -297,8 +301,9 @@ function Expand-Webrtc([string]$ArchivePath, [string]$ExpectedSha256, [Int64]$Ex
     if (-not (Test-WebrtcReady)) {
         throw "Extracted WebRTC package is incomplete: $ArchivePath"
     }
-    Set-Content -LiteralPath $WebrtcMarker -Value $ExpectedSha256 -NoNewline
-    Set-Content -LiteralPath $WebrtcIdentityMarker -Value $WebrtcPackage -NoNewline
+    if (-not (Test-WebrtcPreparedMatches)) {
+        throw "Extracted WebRTC package metadata is missing or mismatched: $ArchivePath"
+    }
 }
 
 function Expand-ArchiveIfNeeded([string]$ArchivePath, [string]$PackageName, [string]$ExpectedSha256) {
@@ -347,7 +352,7 @@ $WebrtcArchive = [string]$selection.asset
 $expectedSha256 = [string]$selection.sha256
 $expectedSize = [Int64]$selection.size
 
-if (Test-WebrtcPreparedMatches $expectedSha256) {
+if (Test-WebrtcPreparedMatches) {
     Write-Host "WebRTC package already prepared"
 } else {
     $webrtcPackageUrl = "$WebrtcReleaseUrl/$WebrtcArchive"

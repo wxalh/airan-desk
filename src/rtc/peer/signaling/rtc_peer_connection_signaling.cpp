@@ -17,6 +17,11 @@ namespace rtc
 
 void PeerConnection::setLocalDescription(Description::Type type)
 {
+    if (m_closed.load() || !m_pc)
+    {
+        LOG_WARN("Ignoring local description request because PeerConnection is closed");
+        return;
+    }
     LOG_DEBUG("Creating local description: type={}", type == Description::Type::Offer ? "offer" : "answer");
     std::function<void(Description)> onLocalDescription;
     {
@@ -38,6 +43,12 @@ void PeerConnection::setRemoteDescription(const Description &description,
                                           std::function<void()> onSuccess,
                                           std::function<void(std::string)> onFailure)
 {
+    if (m_closed.load() || !m_pc)
+    {
+        if (onFailure)
+            onFailure("PeerConnection is closed");
+        return;
+    }
     const std::string sdp = std::string(description);
     LOG_DEBUG("Setting remote description: type={}, size={} bytes", description.typeString(), sdp.size());
     logSdpVideoCodecs("Remote", description.typeString(), sdp);
@@ -58,6 +69,11 @@ void PeerConnection::setRemoteDescription(const Description &description,
 
 void PeerConnection::addRemoteCandidate(const Candidate &candidate)
 {
+    if (m_closed.load() || !m_pc)
+    {
+        LOG_WARN("Ignoring remote ICE candidate because PeerConnection is closed");
+        return;
+    }
     LOG_DEBUG("Adding remote ICE candidate: mid={}, size={} bytes", candidate.mid(), std::string(candidate).size());
     webrtc::SdpParseError error;
 #if AIRAN_WEBRTC_MILESTONE >= 144

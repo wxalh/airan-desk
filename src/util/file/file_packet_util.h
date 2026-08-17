@@ -17,6 +17,7 @@
 #include <functional>
 #include "common/constant.h"
 
+class QCryptographicHash;
 
 constexpr quint64 FRAGMENT_SIZE = 8 * 1024; /* 8KB */
 constexpr quint64 HEADER_SIZE = 32;         
@@ -41,6 +42,7 @@ class FilePacketUtil : public QObject
 public:
     using ProgressCallback = std::function<void(qint64 sentBytes, qint64 totalBytes)>;
     using CancelCallback = std::function<bool()>;
+    using CompletionCallback = std::function<void(bool success, const QString &sha256)>;
 
     explicit FilePacketUtil(QObject *parent = nullptr);
     ~FilePacketUtil();
@@ -48,15 +50,30 @@ public:
     
     static bool sendFileStream(const QString &filePath, const QJsonObject &header, std::shared_ptr<rtc::DataChannel> channel,
                                const ProgressCallback &progressCallback = ProgressCallback(),
-                               const CancelCallback &cancelCallback = CancelCallback());
+                               const CancelCallback &cancelCallback = CancelCallback(),
+                               QString *sha256 = nullptr);
+
+    static void sendFileStreamAsync(const QString &filePath, const QJsonObject &header,
+                                    std::shared_ptr<rtc::DataChannel> channel,
+                                    const ProgressCallback &progressCallback,
+                                    const CancelCallback &cancelCallback,
+                                    const CompletionCallback &completionCallback,
+                                    bool calculateSha256 = false);
 
     
     static bool sendDataPacket(const QJsonObject &header, const QByteArray &payload, std::shared_ptr<rtc::DataChannel> channel,
                                const ProgressCallback &progressCallback = ProgressCallback(),
                                const CancelCallback &cancelCallback = CancelCallback());
 
+    static void sendDataPacketAsync(const QJsonObject &header, const QByteArray &payload,
+                                    std::shared_ptr<rtc::DataChannel> channel,
+                                    const ProgressCallback &progressCallback,
+                                    const CancelCallback &cancelCallback,
+                                    const CompletionCallback &completionCallback);
+
     
     void processReceivedFragment(const rtc::binary &data, const QString &channelName);
+    void clearPendingReassemblies();
 
     
     void processFileDataPacket(const QString &tempFilePath);
@@ -70,14 +87,16 @@ signals:
     void fileDownloadCompleted(bool status, const QString &tempPath);
 
     
-    void fileReceived(bool status, const QString &tempPath, const QString &errorMessage);
+    void fileReceived(bool status, const QString &tempPath, const QString &errorMessage,
+                      const QString &sha256 = QString());
 
 private:
     static bool waitForChannelBackpressure(const std::shared_ptr<rtc::DataChannel> &channel, const QString &filePath,
                                            const CancelCallback &cancelCallback);
     static bool sendPacketStream(QFile *file, const QByteArray &payload, const QJsonObject &header,
                                  std::shared_ptr<rtc::DataChannel> channel, const QString &logPath,
-                                 const ProgressCallback &progressCallback, const CancelCallback &cancelCallback);
+                                 const ProgressCallback &progressCallback, const CancelCallback &cancelCallback,
+                                 QCryptographicHash *fileHash = nullptr);
     void discardReassemblyLocked(const QString &messageId);
     void cleanupExpiredReassembliesLocked(qint64 nowMs);
     void cleanupExpiredCancelledTransfersLocked(qint64 nowMs);
@@ -88,7 +107,7 @@ private:
 
     
     bool streamCopyFile(QFile &sourceFile, qint64 sourceOffset, const QString &targetPath, qint64 dataSize,
-                        QString *errorMessage = nullptr);
+                        QString *errorMessage = nullptr, QString *sha256 = nullptr);
 
     
     std::map<QString, ReassemblyBuffer> m_reassemblyBuffers;

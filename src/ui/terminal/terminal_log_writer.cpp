@@ -12,6 +12,7 @@ namespace
 constexpr int kFlushIntervalMs = 250;
 constexpr int kFlushThresholdBytes = 64 * 1024;
 constexpr int kMaxLogicalLineBytes = 1024 * 1024;
+constexpr int kMaxPendingInputBytes = 4 * 1024 * 1024;
 }
 
 TerminalLogWriter::TerminalLogWriter(QObject *parent)
@@ -25,18 +26,34 @@ qint64 TerminalLogWriter::enqueue(const QByteArray &data)
         return 0;
 
     bool scheduleDrain = false;
+    bool overflowed = false;
     qint64 pendingBytes = 0;
     {
         QMutexLocker locker(&m_inputMutex);
         if (!m_accepting)
             return 0;
-        m_pendingInput.append(data);
-        pendingBytes = m_pendingInput.size();
-        if (!m_drainScheduled)
+        if (data.size() > kMaxPendingInputBytes - m_pendingInput.size())
         {
-            m_drainScheduled = true;
-            scheduleDrain = true;
+            m_accepting = false;
+            overflowed = true;
+            pendingBytes = m_pendingInput.size();
         }
+        else
+        {
+            m_pendingInput.append(data);
+            pendingBytes = m_pendingInput.size();
+            if (!m_drainScheduled)
+            {
+                m_drainScheduled = true;
+                scheduleDrain = true;
+            }
+        }
+    }
+    if (overflowed)
+    {
+        emit errorOccurred(QStringLiteral("Terminal log buffer is full"));
+        emit pendingBytesChanged(pendingBytes);
+        return pendingBytes;
     }
     if (scheduleDrain)
         QMetaObject::invokeMethod(this, "drainInput", Qt::QueuedConnection);

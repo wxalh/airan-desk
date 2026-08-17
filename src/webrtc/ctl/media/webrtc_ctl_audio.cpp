@@ -17,6 +17,9 @@ bool receivesRemoteAudio(const QString &mode)
 
 void WebRtcCtl::setAudioMode(const QString &mode)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     QString normalized = mode.toLower();
     if (normalized != QStringLiteral("listen") && normalized != QStringLiteral("call"))
         normalized = QStringLiteral("off");

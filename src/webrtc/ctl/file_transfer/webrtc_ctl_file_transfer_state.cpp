@@ -6,7 +6,6 @@
 
 #include <QDir>
 #include <QDirIterator>
-
 namespace
 {
 constexpr qint64 kCancelledTransferRetentionMs = 10 * 60 * 1000;
@@ -17,6 +16,11 @@ constexpr int kMaxCancelledTransfers = 1024;
 #include <QThread>
 
 #include <limits>
+
+namespace
+{
+constexpr int kMaxDirectoryTransferEntries = 100000;
+}
 
 
 bool WebRtcCtl::isTransferCancelled(const QString &transferId) const
@@ -55,27 +59,22 @@ void WebRtcCtl::markTransferCancelled(const QString &transferId)
 
 void WebRtcCtl::sendTransferCancel(const QString &transferId)
 {
-    if (transferId.isEmpty() || !m_fileTextChannel || !m_fileTextChannel->isOpen())
+    if (transferId.isEmpty())
         return;
 
     QJsonObject obj = JsonUtil::createObject()
                           .add(Constant::KEY_MSGTYPE, Constant::TYPE_FILE_TRANSFER_CANCEL)
                           .add(Constant::KEY_TRANSFER_ID, transferId)
                           .build();
-    try
-    {
-        m_fileTextChannel->send(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
-        noteSessionOutboundActivity();
-    }
-    catch (const std::exception &e)
-    {
-        LOG_WARN("Failed to send transfer cancel: {}", e.what());
-    }
+    fileTextChannelSendMsg(rtc::message_variant(JsonUtil::toCompactBytes(obj).toStdString()));
 }
 
 
 void WebRtcCtl::cancelFileTransfer(const QString &transferId)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     markTransferCancelled(transferId);
     if (QThread::currentThread() != thread())
     {
@@ -102,7 +101,8 @@ void WebRtcCtl::emitTransferProgress(const QString &transferId, qint64 transferr
 }
 
 
-qint64 WebRtcCtl::collectDirectoryStats(const QString &path, int *fileCount) const
+qint64 WebRtcCtl::collectDirectoryStats(const QString &path, int *fileCount,
+                                        const QString &transferId) const
 {
     if (fileCount)
         *fileCount = 0;
@@ -125,7 +125,15 @@ qint64 WebRtcCtl::collectDirectoryStats(const QString &path, int *fileCount) con
                     QDirIterator::Subdirectories);
     while (it.hasNext())
     {
+        if ((totalFiles & 0xff) == 0)
+        {
+            if (m_shutdownRequested.load() || m_shutdownStarted.load() ||
+                isTransferCancelled(transferId))
+                return -1;
+        }
         QFileInfo fileInfo(it.next());
+        if (totalFiles >= kMaxDirectoryTransferEntries)
+            return -1;
         const qint64 fileSize = qMax<qint64>(0, fileInfo.size());
         totalBytes = totalBytes <= (std::numeric_limits<qint64>::max)() - fileSize
                          ? totalBytes + fileSize
@@ -133,6 +141,9 @@ qint64 WebRtcCtl::collectDirectoryStats(const QString &path, int *fileCount) con
         if (totalFiles < (std::numeric_limits<int>::max)())
             ++totalFiles;
     }
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() ||
+        isTransferCancelled(transferId))
+        return -1;
     if (fileCount)
         *fileCount = totalFiles;
     return totalBytes;

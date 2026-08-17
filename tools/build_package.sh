@@ -31,6 +31,9 @@ fi
 
 if [[ -z "$build_preset" ]]; then
   build_preset="$configure_preset"
+  if [[ "$configure_preset" == win* ]]; then
+    build_preset="${configure_preset}-release"
+  fi
 fi
 
 if [[ -n "$portable_package_name" && "$configure_preset" != linux-* ]]; then
@@ -127,7 +130,6 @@ required_release_files=(
   "licenses/WebRTC-PATENTS.txt"
   "licenses/WebRTC-Third-Party-Licenses.txt"
   "licenses/WebRTC-args.gn"
-  "licenses/WebRTC-package.sha256"
   "licenses/WebRTC-source-revision.txt"
   "licenses/spdlog-LICENSE.txt"
   "licenses/fmt-LICENSE.rst"

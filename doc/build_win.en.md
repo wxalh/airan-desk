@@ -29,7 +29,8 @@ Notes:
 - CMake 3.21+.
 - Git.
 - Windows 10 x64 and Windows 7 x86 use Qt 5 MSVC packages. Windows 10 arm64 uses the Qt 6.8.3 MSVC arm64 package. Windows 7 x86 can use a Qt 5.9.x/5.15.x MSVC x86 package.
-- `third_party/webrtc` contains the Google WebRTC static package used by this project.
+- `third_party/webrtc` contains the Google WebRTC static package matching the
+  target platform, architecture, and runtime.
 - Optional: `third_party/ffmpeg-builds/<package>` and OpenSSL runtime.
 
 ## Get the Source
@@ -118,7 +119,7 @@ The build deploys:
 - `translations/`, Qt system translations when found.
 - FFmpeg DLLs by default when the dependency package exists; official packaging forces the backend on and also requires complete LGPL and source materials.
 - The `licenses/Cisco-OpenH264-BINARY_LICENSE.txt` license text. Airan-Desk does not copy a Cisco OpenH264 binary; the user obtains it separately from Cisco and controls whether it is enabled.
-- `licenses/WebRTC-args.gn`, `licenses/WebRTC-package.sha256`, and `licenses/WebRTC-source-revision.txt` from the selected slice. The selected m144 slice records `rtc_use_h264=false`.
+- `licenses/WebRTC-args.gn` and `licenses/WebRTC-source-revision.txt` from the selected slice. The selected m144 slice records `rtc_use_h264=false`.
 - OpenSSL DLLs when found.
 
 WebRTC DLLs are not deployed because WebRTC is linked statically.

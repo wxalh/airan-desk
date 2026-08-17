@@ -12,6 +12,14 @@ void WsCli::onWsAboutToClose()
 
 void WsCli::onWsBinaryMessageReceived(const QByteArray &message)
 {
+    if (message.size() > kMaxInboundMessageBytes)
+    {
+        LOG_ERROR("Rejected oversized inbound binary signaling message: size={}", message.size());
+        m_connected = false;
+        if (m_ws)
+            m_ws->abort();
+        return;
+    }
     LOG_TRACE("size:{}", message.size());
     emit onWsCliRecvBinaryMsg(message);
 }
@@ -19,7 +27,24 @@ void WsCli::onWsBinaryMessageReceived(const QByteArray &message)
 
 void WsCli::onWsTextMessageReceived(const QString &message)
 {
-    LOG_TRACE("text size:{}", message.toUtf8().size());
+    if (message.size() > kMaxInboundMessageBytes)
+    {
+        LOG_ERROR("Rejected oversized inbound text signaling message: characters={}", message.size());
+        m_connected = false;
+        if (m_ws)
+            m_ws->abort();
+        return;
+    }
+    const qint64 utf8Bytes = message.toUtf8().size();
+    if (utf8Bytes > kMaxInboundMessageBytes)
+    {
+        LOG_ERROR("Rejected oversized inbound text signaling message: bytes={}", utf8Bytes);
+        m_connected = false;
+        if (m_ws)
+            m_ws->abort();
+        return;
+    }
+    LOG_TRACE("text size:{}", utf8Bytes);
     emit onWsCliRecvTextMsg(message);
 }
 
@@ -28,11 +53,15 @@ void WsCli::onWsConnected()
 {
     LOG_INFO("WebSocket connected successfully");
     m_connected = true;
+    m_socketConnectTimer.invalidate();
 
     m_reconnect_phase = 0;
     m_reconnect_count = 0;
     emit stopReconnectTimer();
     emit onReconnectStatusUpdate(tr("Connection restored"), 0, 0, 0);
+
+    if (!flushPendingMessages())
+        return;
 
     emit startHeartTimer(m_heart_interval_ms);
     emit onWsCliConnected();
@@ -43,6 +72,8 @@ void WsCli::onWsDisconnected()
 {
     LOG_WARN("WebSocket disconnected, starting intelligent reconnect");
     m_connected = false;
+    ++m_messageGeneration;
+    m_socketConnectTimer.invalidate();
     emit stopHeartTimer();
     emit onWsCliDisconnected();
 

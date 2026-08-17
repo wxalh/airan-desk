@@ -129,9 +129,11 @@ void FilePacketUtil::processFileDataPacket(const QString &tempFilePath)
     else if (msgType == Constant::TYPE_FILE_UPLOAD && !ctlPath.isEmpty() && !cliPath.isEmpty())
     {
         QString errorMessage;
-        if (streamCopyFile(tempFile, packet.dataStart, cliPath, packet.dataSize, &errorMessage))
+        QString sha256;
+        if (streamCopyFile(tempFile, packet.dataStart, cliPath, packet.dataSize,
+                           &errorMessage, &sha256))
         {
-            emit fileReceived(true, cliPath, QString());
+            emit fileReceived(true, cliPath, QString(), sha256);
             LOG_INFO("Received file upload: {} ({})", cliPath, ConvertUtil::formatFileSize(packet.dataSize));
         }
         else

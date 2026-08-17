@@ -25,6 +25,9 @@ void WebRtcCli::onWsCliRecvTextMsg(const QString &message)
 
 void WebRtcCli::parseWsMsg(const QJsonObject &object)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     QString type = JsonUtil::getString(object, Constant::KEY_TYPE);
     if (type.isEmpty())
     {
@@ -58,11 +61,15 @@ void WebRtcCli::parseWsMsg(const QJsonObject &object)
         }
         const QString reason = JsonUtil::getString(
             object, Constant::KEY_REASON, QStringLiteral("controller_user"));
+        m_remoteDisconnectReceived = true;
         requestDisconnect(reason);
         return;
     }
 
-    if (!m_sessionId.isEmpty() && !sessionId.isEmpty() && sessionId != m_sessionId)
+    const bool sessionScopedSignaling = type == Constant::TYPE_OFFER ||
+                                        type == Constant::TYPE_ANSWER ||
+                                        type == Constant::TYPE_CANDIDATE;
+    if (sessionScopedSignaling && (sessionId.isEmpty() || sessionId != m_sessionId))
     {
         LOG_TRACE("Ignore signaling message {} for unrelated WebRTC session sessionId={}", type, sessionId);
         return;
@@ -86,6 +93,15 @@ void WebRtcCli::handleRemoteDescriptionMessage(const QJsonObject &object, const 
     if (data.isEmpty() || data.size() > kMaxSdpChars)
     {
         LOG_ERROR("parseWsMsg: Invalid SDP size for {} message: {}", type, data.size());
+        return;
+    }
+
+    if (m_remoteDescriptionInFlight)
+    {
+        m_pendingRemoteDescriptionData = data;
+        m_pendingRemoteDescriptionType = type;
+        m_pendingRemoteDescriptionObject = object;
+        LOG_WARN("Remote description already in flight; retaining latest {}", type);
         return;
     }
 

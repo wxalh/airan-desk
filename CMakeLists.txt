@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(airan-desk VERSION 1.1.1 LANGUAGES C CXX)
+project(airan-desk VERSION 1.1.2 LANGUAGES C CXX)
 
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING
@@ -449,14 +449,18 @@ else()
 endif()
 
 set(AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS)
-if(LIBWEBRTC_MILESTONE GREATER_EQUAL 144)
+if(LIBWEBRTC_PERFETTO_ROOT_DIR AND EXISTS "${LIBWEBRTC_PERFETTO_ROOT_DIR}")
     list(APPEND AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS
-        third_party/webrtc/include/m144/third_party/perfetto
-        third_party/webrtc/include/m144/third_party/perfetto/build_config
-    )
+        "${LIBWEBRTC_PERFETTO_ROOT_DIR}")
+endif()
+if(LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR AND
+   EXISTS "${LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR}")
+    list(APPEND AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS
+        "${LIBWEBRTC_PERFETTO_BUILD_CONFIG_DIR}")
 endif()
 
 # Include directories
+set_property(TARGET ${PROJECT_NAME} PROPERTY INCLUDE_DIRECTORIES "")
 target_include_directories(${PROJECT_NAME}
     PRIVATE
     src
@@ -666,9 +670,6 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     "${LIBWEBRTC_BUILD_ARGS_FILE}"
     "$<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/WebRTC-args.gn"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${LIBWEBRTC_PACKAGE_CHECKSUM_FILE}"
-    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/WebRTC-package.sha256"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/spdlog/LICENSE"
     "$<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/spdlog-LICENSE.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -688,6 +689,11 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     "${CMAKE_CURRENT_SOURCE_DIR}/script/README.md"
     "${CMAKE_CURRENT_SOURCE_DIR}/script/README.zh-CN.md"
     "$<TARGET_FILE_DIR:${PROJECT_NAME}>/script"
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/licenses/WebRTC-package.sha256"
 )
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -975,10 +981,6 @@ if(UNIX AND NOT APPLE)
     install(FILES "${LIBWEBRTC_THIRD_PARTY_LICENSE_FILE}"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/airan-desk/licenses
         RENAME WebRTC-Third-Party-Licenses.txt
-    )
-    install(FILES "${LIBWEBRTC_PACKAGE_CHECKSUM_FILE}"
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/airan-desk/licenses
-        RENAME WebRTC-package.sha256
     )
     if(CMAKE_CONFIGURATION_TYPES)
         install(FILES "${LIBWEBRTC_RELEASE_BUILD_ARGS_FILE}"

@@ -10,6 +10,11 @@
 #include <unistd.h>
 #endif
 
+namespace
+{
+constexpr int kMaxWindowsPendingInputBytes = 1024 * 1024;
+}
+
 void TerminalSession::writeInput(const QByteArray &data)
 {
     if (data.isEmpty())
@@ -21,26 +26,13 @@ void TerminalSession::writeInput(const QByteArray &data)
     if (m_usingFallbackProcess && m_inputWrite)
     {
         const QByteArray normalized = normalizeFallbackInput(data);
-        DWORD totalWritten = 0;
-        while (totalWritten < static_cast<DWORD>(normalized.size()))
+        if (!enqueueWindowsInput(normalized) && !m_stopping.load())
         {
-            DWORD written = 0;
-            const DWORD remaining = static_cast<DWORD>(normalized.size()) - totalWritten;
-            if (!WriteFile(m_inputWrite,
-                           normalized.constData() + totalWritten,
-                           remaining,
-                           &written,
-                           nullptr) || written == 0)
-            {
-                LOG_WARN("Failed to write terminal input to Windows fallback pipe: error={}",
-                         static_cast<int>(GetLastError()));
-                break;
-            }
-            totalWritten += written;
+            LOG_ERROR("Rejected Windows fallback input because the writer queue is unavailable: size={}",
+                      normalized.size());
+            emit errorOccurred(QStringLiteral("Terminal input buffer is full"));
         }
-        LOG_TRACE("Terminal Windows fallback input size={}, written={}",
-                  normalized.size(),
-                  totalWritten);
+        LOG_TRACE("Terminal Windows fallback input queued: size={}", normalized.size());
         return;
     }
 #else
@@ -58,6 +50,13 @@ void TerminalSession::writeInput(const QByteArray &data)
         if (localInput.isEmpty())
             return;
 
+        if (localInput.size() > kMaxWindowsPendingInputBytes - m_windowsPendingInput.size())
+        {
+            LOG_ERROR("Rejected terminal input because the ConPTY pending buffer is full: pendingSize={}, inputSize={}",
+                      m_windowsPendingInput.size(), localInput.size());
+            emit errorOccurred(QStringLiteral("Terminal input buffer is full"));
+            return;
+        }
         m_windowsPendingInput.append(localInput);
         if (windowsInputNeedsImmediateFlush(localInput))
         {
@@ -82,8 +81,8 @@ void TerminalSession::writeInput(const QByteArray &data)
 
 void TerminalSession::resize(int cols, int rows)
 {
-    cols = qMax(20, cols);
-    rows = qMax(5, rows);
+    cols = qBound(20, cols, 500);
+    rows = qBound(5, rows, 300);
 
     if (m_usingFallbackProcess)
         return;

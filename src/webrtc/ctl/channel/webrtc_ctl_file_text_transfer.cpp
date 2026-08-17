@@ -19,6 +19,13 @@ bool WebRtcCtl::handleFileTransferTextChannelObject(const QJsonObject &object, c
     }
     if (msgType == Constant::TYPE_FILE_LIST)
     {
+        const QString requestId = JsonUtil::getString(object, Constant::KEY_REQUEST_ID).trimmed();
+        if (!requestId.isEmpty() && requestId != m_latestFileListRequestId)
+        {
+            LOG_DEBUG("Ignoring stale file-list response: requestId={}, expected={}",
+                      requestId, m_latestFileListRequestId);
+            return true;
+        }
         emit recvGetFileList(object);
         return true;
     }

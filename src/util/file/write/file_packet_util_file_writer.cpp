@@ -1,6 +1,9 @@
 #include "util/file/file_packet_util.h"
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+
+#include <memory>
 
 namespace
 {
@@ -9,29 +12,22 @@ constexpr qint64 kCopyBufferSize = 64 * 1024;
 
 
 bool FilePacketUtil::streamCopyFile(QFile &sourceFile, qint64 sourceOffset, const QString &targetPath, qint64 dataSize,
-                                    QString *errorMessage)
+                                    QString *errorMessage, QString *sha256)
 {
     if (errorMessage)
         errorMessage->clear();
+    if (sha256)
+        sha256->clear();
+    std::unique_ptr<QCryptographicHash> fileHash;
+    if (sha256)
+        fileHash = std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
     QFileInfo targetFileInfo(targetPath);
-    const bool hasExistingTarget = targetFileInfo.exists() && targetFileInfo.isFile();
     if (!QDir().mkpath(targetFileInfo.absolutePath()))
     {
         LOG_ERROR("Failed to create target directory: {}", targetFileInfo.absolutePath());
         if (errorMessage)
             *errorMessage = QCoreApplication::translate("FilePacketUtil", "Failed to create target directory: %1").arg(targetFileInfo.absolutePath());
         return false;
-    }
-
-    if (hasExistingTarget)
-    {
-        if (!QFile::remove(targetPath))
-        {
-            LOG_ERROR("Failed to remove existing target file: {}", targetPath);
-            if (errorMessage)
-                *errorMessage = QCoreApplication::translate("FilePacketUtil", "Failed to remove existing target file: %1").arg(targetPath);
-            return false;
-        }
     }
 
     QSaveFile targetFile(targetPath);
@@ -77,6 +73,8 @@ bool FilePacketUtil::streamCopyFile(QFile &sourceFile, qint64 sourceOffset, cons
 
         totalCopied += written;
         remaining -= written;
+        if (fileHash)
+            fileHash->addData(buffer);
     }
 
     if (totalCopied != dataSize)
@@ -114,6 +112,9 @@ bool FilePacketUtil::streamCopyFile(QFile &sourceFile, qint64 sourceOffset, cons
             *errorMessage = QCoreApplication::translate("FilePacketUtil", "Target file does not exist after copy: %1").arg(targetPath);
         return false;
     }
+
+    if (sha256 && fileHash)
+        *sha256 = QString::fromLatin1(fileHash->result().toHex());
 
     return true;
 }

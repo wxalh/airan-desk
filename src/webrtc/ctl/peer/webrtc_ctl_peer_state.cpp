@@ -11,6 +11,38 @@ using webrtc_ctl_peer_state::gatheringStateText;
 using webrtc_ctl_peer_state::iceStateText;
 using webrtc_ctl_peer_state::peerConnectionStateText;
 
+
+void WebRtcCtl::querySelectedNetworkPath()
+{
+    if (!m_peerConnection || m_shutdownStarted.load())
+        return;
+
+    const QPointer<WebRtcCtl> guard(this);
+    const auto callbackLifetime = m_callbackLifetime;
+    m_peerConnection->querySelectedCandidatePair(
+        [guard, callbackLifetime](bool found, rtc::SelectedCandidatePair pair) {
+            auto permit = callbackLifetime->tryEnter();
+            if (!permit || !guard || !found)
+                return;
+
+            const QString selectedPath = selectedNetworkPathFromPair(pair);
+            if (selectedPath.isEmpty())
+                return;
+
+            LOG_DEBUG("Selected candidate pair from stats: localType={}, localProtocol={}, localRelayProtocol={}, remoteType={}, remoteProtocol={}, remoteRelayProtocol={}",
+                      pair.local.candidateType,
+                      pair.local.protocol,
+                      pair.local.relayProtocol,
+                      pair.remote.candidateType,
+                      pair.remote.protocol,
+                      pair.remote.relayProtocol);
+            guard->m_callbackDispatcher->post([guard, selectedPath]() {
+                if (guard && !guard->m_shutdownStarted.load())
+                    guard->publishNetworkPathState(selectedPath);
+            });
+        });
+}
+
 /*
  * Handles PeerConnection state changes, publishes the selected path, and schedules reconnects when needed.
  */
@@ -28,19 +60,18 @@ void WebRtcCtl::onPeerConnectionStateChanged(rtc::PeerConnection::State state)
         return;
     }
     m_connected = (state == rtc::PeerConnection::State::Connected);
+    if (m_connected)
+    {
+        if (m_peerStartupTimer)
+            m_peerStartupTimer->stop();
+        flushPendingFileTextMessages();
+    }
 
     std::string stateStr;
     if (state == rtc::PeerConnection::State::Connected)
     {
         stateStr = "Connected";
-        rtc::Candidate local;
-        rtc::Candidate remote;
-        if (m_peerConnection && m_peerConnection->getSelectedCandidatePair(&local, &remote))
-        {
-            LOG_DEBUG("Selected candidate pair: local={}, remote={}", std::string(local), std::string(remote));
-            publishNetworkPathState(selectedNetworkPathFromPair(QString::fromStdString(std::string(local)),
-                                                                QString::fromStdString(std::string(remote))));
-        }
+        querySelectedNetworkPath();
         stopReconnect();
     }
     else if (state == rtc::PeerConnection::State::Connecting)

@@ -11,6 +11,7 @@ class QHBoxLayout;
 class QLabel;
 class QPushButton;
 class QMouseEvent;
+class QTimer;
 
 class AppTitleBar : public QWidget
 {
@@ -44,6 +45,8 @@ private:
     double effectiveScale() const;
     void applyScale();
     void applyStyle();
+    void enableAncestorMouseTracking();
+    void syncButtonHoverFromCursor();
     void toggleMaximize();
     Qt::Edges hitTest(const QPoint &globalPos) const;
     void updateCursor(const QPoint &globalPos);
@@ -60,6 +63,7 @@ private:
     bool m_resizing{false};
     double m_scale{1.0};
     bool m_customScale{false};
+    QTimer *m_hoverTimer{nullptr};
     Qt::Edges m_resizeEdges{Qt::Edges()};
     QPoint m_dragOffset;
     QSize m_resizeAspectBase;

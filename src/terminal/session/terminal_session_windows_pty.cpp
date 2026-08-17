@@ -2,12 +2,20 @@
 #include "common/logger_manager.h"
 
 #include <QDir>
+#include <QMetaObject>
 #include <QThread>
+
+#include <system_error>
 
 #if defined(Q_OS_WIN)
 
 bool TerminalSession::startWindowsFallbackProcess()
 {
+    // ConPTY failure cleanup marks the session as stopping; a fallback retry
+    // is a new child session and must restart its reader state.
+    m_stopping.store(false);
+    m_readerRunning.store(false);
+    m_usingFallbackProcess = false;
     SECURITY_ATTRIBUTES sa{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
     HANDLE inputRead = nullptr;
     HANDLE outputWrite = nullptr;
@@ -16,15 +24,33 @@ bool TerminalSession::startWindowsFallbackProcess()
     {
         if (inputRead)
             CloseHandle(inputRead);
+        if (m_inputWrite)
+        {
+            CloseHandle(m_inputWrite);
+            m_inputWrite = nullptr;
+        }
+        if (m_outputRead)
+        {
+            CloseHandle(m_outputRead);
+            m_outputRead = nullptr;
+        }
         if (outputWrite)
             CloseHandle(outputWrite);
         closeConPty();
-        emit errorOccurred(QStringLiteral("Failed to create Windows fallback terminal pipes"));
         return false;
     }
 
-    SetHandleInformation(m_inputWrite, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(m_outputRead, HANDLE_FLAG_INHERIT, 0);
+    if (!SetHandleInformation(m_inputWrite, HANDLE_FLAG_INHERIT, 0) ||
+        !SetHandleInformation(m_outputRead, HANDLE_FLAG_INHERIT, 0))
+    {
+        const DWORD error = GetLastError();
+        CloseHandle(inputRead);
+        CloseHandle(outputWrite);
+        closeConPty();
+        LOG_WARN("Failed to protect Windows fallback pipe handles from inheritance: error={}",
+                 static_cast<int>(error));
+        return false;
+    }
 
     STARTUPINFOW si{};
     si.cb = sizeof(STARTUPINFOW);
@@ -48,14 +74,27 @@ bool TerminalSession::startWindowsFallbackProcess()
     if (!ok)
     {
         closeConPty();
-        emit errorOccurred(QStringLiteral("Failed to start Windows fallback terminal shell"));
         return false;
     }
 
     CloseHandle(pi.hThread);
     m_processHandle = pi.hProcess;
+    m_usingFallbackProcess = true;
     m_readerRunning.store(true);
-    m_readerThread = std::thread(&TerminalSession::readerLoop, this);
+    const quint64 generation = ++m_windowsSessionGeneration;
+    try
+    {
+        startWindowsInputWriter(generation);
+        m_readerThread = std::thread(&TerminalSession::readerLoop, this, generation);
+    }
+    catch (const std::system_error &error)
+    {
+        LOG_ERROR("Failed to create Windows terminal fallback threads: generation={}, error={}",
+                  generation,
+                  error.what());
+        closeConPty();
+        return false;
+    }
     return true;
 }
 
@@ -80,15 +119,33 @@ bool TerminalSession::startPty(int cols, int rows)
     {
         if (inputRead)
             CloseHandle(inputRead);
+        if (m_inputWrite)
+        {
+            CloseHandle(m_inputWrite);
+            m_inputWrite = nullptr;
+        }
+        if (m_outputRead)
+        {
+            CloseHandle(m_outputRead);
+            m_outputRead = nullptr;
+        }
         if (outputWrite)
             CloseHandle(outputWrite);
         closeConPty();
-        emit errorOccurred(QStringLiteral("Failed to create terminal pipes"));
         return false;
     }
 
-    SetHandleInformation(m_inputWrite, HANDLE_FLAG_INHERIT, 0);
-    SetHandleInformation(m_outputRead, HANDLE_FLAG_INHERIT, 0);
+    if (!SetHandleInformation(m_inputWrite, HANDLE_FLAG_INHERIT, 0) ||
+        !SetHandleInformation(m_outputRead, HANDLE_FLAG_INHERIT, 0))
+    {
+        const DWORD error = GetLastError();
+        CloseHandle(inputRead);
+        CloseHandle(outputWrite);
+        closeConPty();
+        LOG_WARN("Failed to protect ConPTY pipe handles from inheritance: error={}",
+                 static_cast<int>(error));
+        return false;
+    }
 
     COORD size{static_cast<SHORT>(cols), static_cast<SHORT>(rows)};
     HRESULT hr = createPseudoConsole(size, inputRead, outputWrite, 0, &m_hpc);
@@ -96,7 +153,6 @@ bool TerminalSession::startPty(int cols, int rows)
     CloseHandle(outputWrite);
     if (FAILED(hr))
     {
-        emit errorOccurred(QStringLiteral("Failed to create Windows pseudo console"));
         closeConPty();
         return false;
     }
@@ -111,7 +167,6 @@ bool TerminalSession::startPty(int cols, int rows)
     {
         if (si.lpAttributeList)
             HeapFree(GetProcessHeap(), 0, si.lpAttributeList);
-        emit errorOccurred(QStringLiteral("Failed to initialize pseudo console attributes"));
         closeConPty();
         return false;
     }
@@ -121,7 +176,6 @@ bool TerminalSession::startPty(int cols, int rows)
     {
         DeleteProcThreadAttributeList(si.lpAttributeList);
         HeapFree(GetProcessHeap(), 0, si.lpAttributeList);
-        emit errorOccurred(QStringLiteral("Failed to attach pseudo console"));
         closeConPty();
         return false;
     }
@@ -140,7 +194,6 @@ bool TerminalSession::startPty(int cols, int rows)
 
     if (!ok)
     {
-        emit errorOccurred(QStringLiteral("Failed to start terminal shell"));
         closeConPty();
         return false;
     }
@@ -148,11 +201,24 @@ bool TerminalSession::startPty(int cols, int rows)
     CloseHandle(pi.hThread);
     m_processHandle = pi.hProcess;
     m_readerRunning.store(true);
-    m_readerThread = std::thread(&TerminalSession::readerLoop, this);
+    const quint64 generation = ++m_windowsSessionGeneration;
+    try
+    {
+        startWindowsInputWriter(generation);
+        m_readerThread = std::thread(&TerminalSession::readerLoop, this, generation);
+    }
+    catch (const std::system_error &error)
+    {
+        LOG_ERROR("Failed to create Windows ConPTY threads: generation={}, error={}",
+                  generation,
+                  error.what());
+        closeConPty();
+        return false;
+    }
     return true;
 }
 
-void TerminalSession::readerLoop()
+void TerminalSession::readerLoop(quint64 generation)
 {
     QByteArray buffer;
     buffer.resize(8192);
@@ -169,7 +235,10 @@ void TerminalSession::readerLoop()
         const QByteArray data = buffer.left(static_cast<int>(readBytes));
         const QString source = m_usingFallbackProcess ? QStringLiteral("pipe") : QStringLiteral("conpty");
         logWindowsTerminalBytes(data, source);
-        emit outputReady(decodeWindowsOutput(data.constData(), data.size()));
+        const QByteArray decoded = m_usingFallbackProcess
+                                       ? decodeWindowsConsoleBytes(data)
+                                       : decodeWindowsOutput(data.constData(), data.size());
+        emit outputReady(decoded);
     }
 
     if (!m_readerRunning.load())
@@ -182,6 +251,23 @@ void TerminalSession::readerLoop()
         if (GetExitCodeProcess(m_processHandle, &code) && code != STILL_ACTIVE)
             exitCode = static_cast<int>(code);
     }
+    if (!QMetaObject::invokeMethod(this,
+                                   "finalizeWindowsProcessExit",
+                                   Qt::QueuedConnection,
+                                   Q_ARG(quint64, generation),
+                                   Q_ARG(int, exitCode)))
+    {
+        LOG_ERROR("Failed to queue cleanup for an exited Windows terminal process");
+    }
+}
+
+void TerminalSession::finalizeWindowsProcessExit(quint64 generation, int exitCode)
+{
+    if (generation != m_windowsSessionGeneration || !m_processHandle)
+        return;
+
+    closeConPty();
+    m_usingFallbackProcess = false;
     emitClosedOnce(exitCode);
 }
 
@@ -193,17 +279,6 @@ void TerminalSession::closeConPty()
 
     m_stopping.store(true);
     m_readerRunning.store(false);
-    if (m_inputWrite)
-    {
-        CloseHandle(m_inputWrite);
-        m_inputWrite = nullptr;
-    }
-    cancelReaderIo();
-    if (m_outputRead)
-    {
-        CloseHandle(m_outputRead);
-        m_outputRead = nullptr;
-    }
     if (m_processHandle)
     {
         WaitForSingleObject(m_processHandle, 1000);
@@ -214,18 +289,26 @@ void TerminalSession::closeConPty()
             WaitForSingleObject(m_processHandle, 1000);
         }
     }
+    stopWindowsInputWriter();
+    if (m_inputWrite)
+    {
+        CloseHandle(m_inputWrite);
+        m_inputWrite = nullptr;
+    }
+    // Terminating the child first closes its inherited pipe end and lets the
+    // reader leave ReadFile cleanly. Closing the member handle before joining
+    // the reader races with ReadFile and can leave stop() blocked indefinitely.
+    cancelReaderIo();
+    if (m_readerThread.joinable())
+        m_readerThread.join();
+    if (m_outputRead)
+        CloseHandle(m_outputRead);
     if (m_hpc && closePseudoConsole)
     {
         closePseudoConsole(m_hpc);
         m_hpc = nullptr;
     }
-    if (m_readerThread.joinable())
-        m_readerThread.join();
-    if (m_outputRead)
-    {
-        CloseHandle(m_outputRead);
-        m_outputRead = nullptr;
-    }
+    m_outputRead = nullptr;
     if (m_processHandle)
     {
         CloseHandle(m_processHandle);
@@ -233,11 +316,52 @@ void TerminalSession::closeConPty()
     }
 }
 
-void TerminalSession::cancelReaderIo()
+void TerminalSession::stopWindowsInputWriter()
+{
+    m_writerRunning.store(false);
+    {
+        std::lock_guard<std::mutex> lock(m_writerMutex);
+        m_writerPendingInput.clear();
+    }
+    m_writerCondition.notify_all();
+    cancelWriterIo();
+    if (m_writerThread.joinable())
+        m_writerThread.join();
+}
+
+void TerminalSession::cancelWriterIo()
 {
     typedef BOOL(WINAPI * CancelSynchronousIoFn)(HANDLE);
     static CancelSynchronousIoFn cancelSynchronousIo =
         reinterpret_cast<CancelSynchronousIoFn>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CancelSynchronousIo"));
+
+    if (!cancelSynchronousIo || !m_writerThread.joinable())
+        return;
+
+    HANDLE writerHandle = static_cast<HANDLE>(m_writerThread.native_handle());
+    if (!writerHandle || cancelSynchronousIo(writerHandle))
+        return;
+
+    const DWORD error = GetLastError();
+    if (error != ERROR_NOT_FOUND)
+        LOG_WARN("Failed to cancel terminal writer IO: {}", static_cast<int>(error));
+}
+
+void TerminalSession::cancelReaderIo()
+{
+    typedef BOOL(WINAPI * CancelIoExFn)(HANDLE, LPOVERLAPPED);
+    typedef BOOL(WINAPI * CancelSynchronousIoFn)(HANDLE);
+    static CancelIoExFn cancelIoEx =
+        reinterpret_cast<CancelIoExFn>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CancelIoEx"));
+    static CancelSynchronousIoFn cancelSynchronousIo =
+        reinterpret_cast<CancelSynchronousIoFn>(GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CancelSynchronousIo"));
+
+    if (m_outputRead && cancelIoEx && !cancelIoEx(m_outputRead, nullptr))
+    {
+        const DWORD error = GetLastError();
+        if (error != ERROR_NOT_FOUND && error != ERROR_OPERATION_ABORTED)
+            LOG_WARN("Failed to cancel terminal output IO: error={}", static_cast<int>(error));
+    }
 
     if (!m_readerThread.joinable())
         return;

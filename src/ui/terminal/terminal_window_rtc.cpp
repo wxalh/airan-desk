@@ -4,10 +4,16 @@
 #include "terminal/emulator/native_terminal_widget.h"
 
 #include <QMessageBox>
+#include <QTimer>
 
 
 void TerminalWindow::initCLI()
 {
+    m_terminalStartTimer = new QTimer(this);
+    m_terminalStartTimer->setSingleShot(true);
+    connect(m_terminalStartTimer, &QTimer::timeout,
+            this, &TerminalWindow::onTerminalStartTimeout);
+
     connect(&m_rtcCtl, &WebRtcCtl::sendWsCliBinaryMsg, m_ws, &WsCli::sendWsCliBinaryMsg);
     connect(&m_rtcCtl, &WebRtcCtl::sendWsCliTextMsg, m_ws, &WsCli::sendWsCliTextMsg);
     connect(m_ws, &WsCli::onWsCliRecvBinaryMsg, &m_rtcCtl, &WebRtcCtl::onWsCliRecvBinaryMsg);
@@ -55,8 +61,14 @@ void TerminalWindow::onTerminalSessionHealthChanged(int state, const QString &me
         return;
     if (state == 2)
     {
+        if (m_terminalStartTimer)
+            m_terminalStartTimer->stop();
         m_channelReady = false;
         m_started = false;
+        m_terminalFallbackRequested = false;
+        m_terminalLegacyResponseMode = false;
+        if (m_filePanel)
+            m_filePanel->setPendingFileListRequestId(QString());
     }
     else if (state == 0 && m_channelReady)
     {
@@ -74,13 +86,9 @@ void TerminalWindow::onFilePanelSessionHealthChanged(int state, const QString &m
         m_filePanel->setConnected(false);
         m_filePanel->abortTransfers(message);
     }
-    else if (state == 1)
+    else if (state == 1 || state == 0)
     {
-        m_filePanel->setConnected(state == 0);
-    }
-    else if (state == 0)
-    {
-        m_filePanel->setConnected(false);
+        m_filePanel->setConnected(true);
     }
 }
 

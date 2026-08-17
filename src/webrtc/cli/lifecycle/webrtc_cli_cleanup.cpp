@@ -8,25 +8,55 @@
 #include "security/terminal_command_audit_parser.h"
 
 #include <QMutexLocker>
+#include <QElapsedTimer>
+
+void WebRtcCli::wakeClipboardWaitersForShutdown()
+{
+    QMutexLocker locker(&m_transferMutex);
+    for (const QString &path : m_pendingClipboardPromiseTargets)
+        m_clipboardPromiseFileResults.insert(path, false);
+    for (const QString &requestId : m_pendingClipboardStreamRequests.keys())
+        m_clipboardStreamErrors.insert(requestId, QStringLiteral("Session closed."));
+    m_clipboardPromiseFileWait.wakeAll();
+    m_clipboardStreamWait.wakeAll();
+}
 
 
 void WebRtcCli::performDestroy()
 {
+    QElapsedTimer shutdownTimer;
+    shutdownTimer.start();
+    LOG_DEBUG("WebRtcCli shutdown started: session={}", m_sessionId);
+    m_shutdownRequested.store(true);
     if (m_shutdownStarted.exchange(true))
         return;
+    if (!m_disconnectSent && !m_remoteDisconnectReceived)
+        sendSessionDisconnect(m_disconnectReason);
+    ++m_fileListGeneration;
+    m_fileListScanPending = false;
+    m_pendingFileListRequestId.clear();
     if (m_auditSession)
     {
         m_auditSession->finish(m_disconnectReason);
         emit controlledSessionDisconnected(m_sessionId, m_remoteId, m_disconnectReason);
     }
+    wakeClipboardWaitersForShutdown();
     m_callbackLifetime->closeAndWait();
+    LOG_DEBUG("WebRtcCli shutdown stage callback-lifetime closed: session={}, elapsedMs={}",
+              m_sessionId, shutdownTimer.elapsed());
     m_destroying = true;
+    m_peerConnected.store(false);
     failClipboardChunkSendQueue();
     clearClipboardPayloadTransferState();
     m_subscribed = false;
+    m_mediaStatsQueryInFlight.store(false);
     m_connected = false;
     m_channelsReady = false;
     m_remoteDescriptionSet = false;
+    m_remoteDescriptionInFlight = false;
+    m_pendingRemoteDescriptionData.clear();
+    m_pendingRemoteDescriptionType.clear();
+    m_pendingRemoteDescriptionObject = QJsonObject();
     m_pendingRemoteCandidates.clear();
     {
         QMutexLocker locker(&m_fileIngressMutex);
@@ -34,6 +64,24 @@ void WebRtcCli::performDestroy()
         m_fileIngressBytes = 0;
         m_fileIngressScheduled = false;
         m_fileIngressDrained.wakeAll();
+    }
+    {
+        QMutexLocker locker(&m_captureStateIngressMutex);
+        m_pendingCaptureState = PendingCaptureState();
+        m_captureStateIngressScheduled = false;
+    }
+    {
+        QMutexLocker locker(&m_inputMoveIngressMutex);
+        m_pendingInputMoveMessage = QJsonObject();
+        m_pendingInputMoveBoundary = false;
+        m_inputMoveIngressScheduled = false;
+    }
+    {
+        QMutexLocker locker(&m_fileTextIngressMutex);
+        m_fileTextIngress.clear();
+        m_fileTextIngressBytes = 0;
+        m_fileTextIngressScheduled = false;
+        m_fileTextIngressOverflowed.store(false);
     }
     {
         QMutexLocker locker(&m_transferMutex);
@@ -45,11 +93,14 @@ void WebRtcCli::performDestroy()
             m_clipboardStreamErrors.insert(requestId, QStringLiteral("Session closed."));
         m_clipboardStreamChunks.clear();
         m_pendingClipboardStreamRequests.clear();
+        m_cancelledTransfers.clear();
         m_clipboardPromiseFileWait.wakeAll();
         m_clipboardStreamWait.wakeAll();
     }
     if (m_inputChannelRecoverTimer)
         m_inputChannelRecoverTimer->stop();
+    if (m_peerStartupTimer)
+        m_peerStartupTimer->stop();
     if (m_streamConfigApplyTimer)
         m_streamConfigApplyTimer->stop();
     if (m_streamConfigNotifyTimer)
@@ -86,11 +137,30 @@ void WebRtcCli::performDestroy()
 
     if (m_terminalSession)
     {
+        ++m_terminalSessionGeneration;
         m_terminalSession->stop();
         m_terminalSession->deleteLater();
         m_terminalSession = nullptr;
     }
+    LOG_DEBUG("WebRtcCli shutdown stage terminal stopped: session={}, elapsedMs={}",
+              m_sessionId, shutdownTimer.elapsed());
     m_pendingTerminalOutputChunks.clear();
+    m_pendingTerminalOutputBytes = 0;
+    m_pendingTerminalEndType.clear();
+    m_pendingTerminalEndError.clear();
+    m_pendingTerminalEndRequestId.clear();
+    m_pendingTerminalExitCode = 0;
+    m_pendingFileTextMessages.clear();
+    m_pendingFileTextMessageBytes = 0;
+    m_pendingClipboardControlMessages.clear();
+    m_pendingClipboardControlMessageBytes = 0;
+    m_lastSessionHeartbeatSentMs = 0;
+    m_pendingInputMessages.clear();
+    m_pendingInputMessageBytes = 0;
+    m_pendingDownloads.clear();
+    m_activeFileMutationTasks = 0;
+    m_activeClipboardExpansionTasks = 0;
+    m_activeClipboardStreamReadRequests.clear();
     m_terminalAuditParser.reset();
     m_auditedClipboardDownloads.clear();
 
@@ -114,6 +184,8 @@ void WebRtcCli::performDestroy()
     closeChannel(m_fileTextChannel);
     closeChannel(m_clipboardChannel);
     closeChannel(m_heartbeatChannel);
+    LOG_DEBUG("WebRtcCli shutdown stage data channels closed: session={}, elapsedMs={}",
+              m_sessionId, shutdownTimer.elapsed());
 
     auto closeTrack = [](std::shared_ptr<rtc::Track> &track) {
         if (!track)
@@ -146,6 +218,8 @@ void WebRtcCli::performDestroy()
         }
         m_peerConnection.reset();
     }
+    LOG_DEBUG("WebRtcCli shutdown stage peer connection closed: session={}, elapsedMs={}",
+              m_sessionId, shutdownTimer.elapsed());
 
     if (m_filePacketUtil)
     {
@@ -165,13 +239,13 @@ void WebRtcCli::performDestroy()
         ClipboardFilePromise::cancelCacheRoot(cacheRoot);
         ClipboardUtil::cleanupCacheRootAsync(cacheRoot);
     }
-    m_clipboardInboundTextChunks.clear();
-    m_clipboardInboundTextChunkCounts.clear();
-    m_clipboardInboundTextNextIndexes.clear();
-    m_clipboardInboundTextExpectedBytes.clear();
-    m_clipboardInboundTextPasteAfterApply.clear();
     m_uploadFragments.clear();
-    LOG_INFO("WebRtcCli destroyed");
+    LOG_INFO("WebRtcCli destroyed: session={}, elapsedMs={}", m_sessionId, shutdownTimer.elapsed());
+}
+
+void WebRtcCli::requestShutdown()
+{
+    m_shutdownRequested.store(true);
 }
 
 void WebRtcCli::destroy()

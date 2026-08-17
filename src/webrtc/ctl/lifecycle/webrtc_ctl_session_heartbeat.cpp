@@ -27,7 +27,7 @@ void WebRtcCtl::setupHeartbeatChannelCallbacks()
 
 void WebRtcCtl::onHeartbeatChannelOpen()
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     if (QThread::currentThread() != thread())
     {
@@ -43,6 +43,7 @@ void WebRtcCtl::onHeartbeatChannelOpen()
     m_lastSessionOutboundMs.store(now);
     m_lastSessionProgressMs.store(now);
     m_lastBufferedAmount = sampleSessionBufferedAmount();
+    m_lastSessionHeartbeatSentMs = 0;
     m_heartbeatNegotiated.store(false);
     if (m_sessionHeartbeatTimer)
         m_sessionHeartbeatTimer->start(1000);
@@ -51,7 +52,7 @@ void WebRtcCtl::onHeartbeatChannelOpen()
 
 void WebRtcCtl::onHeartbeatChannelMessage(rtc::message_variant message)
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     noteSessionInboundActivity();
     if (!std::holds_alternative<std::string>(message))
@@ -76,20 +77,24 @@ void WebRtcCtl::onHeartbeatChannelMessage(rtc::message_variant message)
 
 void WebRtcCtl::onHeartbeatChannelError(std::string error)
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     LOG_WARN("Session heartbeat channel error: {}", error);
 }
 
 void WebRtcCtl::onHeartbeatChannelClosed()
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
-    LOG_WARN("Session heartbeat channel closed; waiting for session timeout");
+    LOG_WARN("Session heartbeat channel closed; scheduling immediate session reconnect");
+    requestSessionReconnect(tr("Session heartbeat channel closed, reconnecting..."));
 }
 
 void WebRtcCtl::sendSessionHeartbeat(const QString &action)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     if (!m_heartbeatChannel || !m_heartbeatChannel->isOpen())
         return;
     const QJsonObject object = JsonUtil::createObject()
@@ -100,7 +105,10 @@ void WebRtcCtl::sendSessionHeartbeat(const QString &action)
     try
     {
         if (m_heartbeatChannel->send(JsonUtil::toCompactString(object).toStdString()))
+        {
+            m_lastSessionHeartbeatSentMs = QDateTime::currentMSecsSinceEpoch();
             noteSessionOutboundActivity();
+        }
     }
     catch (const std::exception &e)
     {
@@ -149,16 +157,32 @@ void WebRtcCtl::setSessionHealth(int state, const QString &message)
 
 void WebRtcCtl::requestSessionReconnect(const QString &message)
 {
-    if (!m_allowReconnect || m_shutdownStarted.load())
+    if (QThread::currentThread() != thread())
+    {
+        const QPointer<WebRtcCtl> guard(this);
+        m_callbackDispatcher->post([guard, message]() {
+            if (guard)
+                guard->requestSessionReconnect(message);
+        });
         return;
+    }
+    if (!m_allowReconnect || m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+    // Tell the controlled side to tear down the old peer before the
+    // reconnect creates a new CONNECT request. Otherwise both startup
+    // sessions can overlap until the remote timeout expires.
+    sendDisconnectSignal(QStringLiteral("reconnect"));
     setSessionHealth(2, message);
     scheduleReconnect();
 }
 
 void WebRtcCtl::pollSessionHeartbeat()
 {
-    if (m_shutdownStarted.load())
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
+    flushPendingFileTextMessages();
+    flushPendingInputControlMessages();
+    flushPendingClipboardControlMessages();
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (m_lastSessionOutboundMs.load() == 0)
         m_lastSessionOutboundMs.store(now);
@@ -172,7 +196,7 @@ void WebRtcCtl::pollSessionHeartbeat()
         noteSessionTransportProgress();
     m_lastBufferedAmount = buffered;
     if (m_heartbeatChannel && m_heartbeatChannel->isOpen() &&
-        now - m_lastSessionOutboundMs.load() >= kHeartbeatIntervalMs)
+        (m_lastSessionHeartbeatSentMs == 0 || now - m_lastSessionHeartbeatSentMs >= kHeartbeatIntervalMs))
         sendSessionHeartbeat(QStringLiteral("ping"));
 
     if (!m_heartbeatNegotiated.load())

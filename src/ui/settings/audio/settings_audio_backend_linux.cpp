@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QStringList>
+#include <QTimer>
 
 namespace SettingsAudioBackend
 {
@@ -114,7 +115,8 @@ bool playToneOnOutput(const QString &configuredOutput)
             return true;
     }
 
-    QApplication::beep();
+    if (qApp)
+        QTimer::singleShot(0, qApp, []() { QApplication::beep(); });
     return true;
 }
 

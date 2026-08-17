@@ -45,6 +45,12 @@ class AuditSession;
 class TerminalCommandAuditParser;
 struct TerminalCommandAuditRecord;
 
+struct CliDirectoryFileEntry
+{
+    QString cliPath;
+    QString ctlPath;
+    qint64 size{0};
+};
 
 class WebRtcCli : public QObject,
                   private airan::media::AiranCaptureCallback
@@ -72,22 +78,30 @@ public:
     ~WebRtcCli();
 
     void setControlledSessionMode(const QString &mode);
+    QString sessionId() const { return m_sessionId; }
+    QString remoteId() const { return m_remoteId; }
+    QString controlledSessionMode() const { return m_controlledSessionMode; }
+    bool isConnected() const { return m_peerConnected.load(); }
+    void requestShutdown();
 
     
     void parseWsMsg(const QJsonObject &object);
 
 private:
     void performDestroy();
+    bool consumeImmediateTransferCancel(const QByteArray &data);
     void initPeerConnection();
     void createTracksAndChannels();
     void setupCallbacks();
     void sendSignalingError(const QString &message);
+    void sendSessionDisconnect(const QString &reason);
 
     int effectiveCaptureFps() const;
     int currentPipelineFpsLimit() const;
     int clampFpsForCurrentPipeline(int fps) const;
     void applyEffectiveVideoFpsIfNeeded(const char *reason);
     rtc::Configuration buildRtcConfiguration() const;
+    void initializeScreenSelection();
     QString currentScreenId() const;
     int screenIndexForId(const QString &screenId) const;
     int desktopSourceIndexForScreenIndex(int screenIndex) const;
@@ -103,9 +117,14 @@ private:
     std::shared_ptr<AuditSession> m_auditSession;
     QString m_disconnectReason{QStringLiteral("remote_or_network")};
     bool m_disconnectSent{false};
+    bool m_remoteDisconnectReceived{false};
     bool m_connectionAudited{false};
     bool m_isOnlyFile;
     QDir m_currentDir;
+    quint64 m_fileListGeneration{0};
+    bool m_fileListScanRunning{false};
+    bool m_fileListScanPending{false};
+    QString m_pendingFileListRequestId;
 
     std::shared_ptr<rtc::PeerConnection> m_peerConnection;
     std::shared_ptr<rtc::DataChannel> m_fileChannel;
@@ -114,18 +133,29 @@ private:
     std::shared_ptr<rtc::DataChannel> m_inputMoveChannel;
     std::shared_ptr<rtc::DataChannel> m_clipboardChannel;
     std::shared_ptr<rtc::DataChannel> m_heartbeatChannel;
+    QQueue<QJsonObject> m_pendingFileTextMessages;
+    qint64 m_pendingFileTextMessageBytes = 0;
+    QQueue<QJsonObject> m_pendingInputMessages;
+    qint64 m_pendingInputMessageBytes = 0;
     std::shared_ptr<rtc::Track> m_videoTrack;
     std::shared_ptr<rtc::Track> m_audioTrack;
 
     bool m_connected = false;
+    std::atomic_bool m_peerConnected{false};
     bool m_channelsReady = false;
     bool m_destroying = false;
     std::atomic_bool m_shutdownStarted{false};
+    std::atomic_bool m_shutdownRequested{false};
     bool m_remoteDescriptionSet = false;
+    bool m_remoteDescriptionInFlight = false;
+    QString m_pendingRemoteDescriptionData;
+    QString m_pendingRemoteDescriptionType;
+    QJsonObject m_pendingRemoteDescriptionObject;
     QVector<QPair<QString, QString>> m_pendingRemoteCandidates;
 
     int m_fps = 0;
     bool m_subscribed = false;
+    std::atomic_bool m_mediaStatsQueryInFlight{false};
     QString m_lastStreamConfigSignature;
     qint64 m_lastStreamConfigNotifyMs = 0;
     QJsonObject m_pendingStreamConfig;
@@ -154,17 +184,46 @@ private:
     FilePacketUtil *m_filePacketUtil = nullptr;
     QtCallbackDispatcher *m_callbackDispatcher = nullptr;
     std::shared_ptr<CallbackLifetime> m_callbackLifetime{std::make_shared<CallbackLifetime>()};
+    struct PendingCaptureState
+    {
+        QString captureMethod;
+        QString capturePath;
+        QString encodePath;
+        QString fallbackReason;
+        QString captureBackend;
+    };
+    QMutex m_captureStateIngressMutex;
+    PendingCaptureState m_pendingCaptureState;
+    bool m_captureStateIngressScheduled{false};
     QMutex m_fileIngressMutex;
     QWaitCondition m_fileIngressDrained;
     std::deque<rtc::binary> m_fileIngress;
     qint64 m_fileIngressBytes = 0;
     bool m_fileIngressScheduled = false;
+    std::atomic_bool m_fileIngressOverflowed{false};
+    QMutex m_fileTextIngressMutex;
+    QQueue<QByteArray> m_fileTextIngress;
+    qint64 m_fileTextIngressBytes{0};
+    bool m_fileTextIngressScheduled{false};
+    std::atomic_bool m_fileTextIngressOverflowed{false};
+    QMutex m_inputMoveIngressMutex;
+    QJsonObject m_pendingInputMoveMessage;
+    bool m_pendingInputMoveBoundary{false};
+    bool m_inputMoveIngressScheduled{false};
     TerminalSession *m_terminalSession = nullptr;
     QTimer *m_terminalBackpressureTimer = nullptr;
     QQueue<QByteArray> m_pendingTerminalOutputChunks;
+    qint64 m_pendingTerminalOutputBytes = 0;
+    bool m_terminalOutputNeedsReset = false;
     bool m_terminalChannelPaused = false;
     bool m_terminalRemotePaused = false;
+    QString m_pendingTerminalEndType;
+    QString m_pendingTerminalEndError;
+    QString m_pendingTerminalEndRequestId;
+    int m_pendingTerminalExitCode = 0;
     std::unique_ptr<TerminalCommandAuditParser> m_terminalAuditParser;
+    QString m_terminalStartRequestId;
+    quint64 m_terminalSessionGeneration{0};
 
     std::string m_host;
     uint16_t m_port = 0;
@@ -174,6 +233,8 @@ private:
     int m_screen_height = 0;
     int m_screenIndex = 0;
     int m_currentDesktopSourceIndex = 0;
+    intptr_t m_currentDesktopSourceId = 0;
+    bool m_currentDesktopSourceHasId = false;
     QString m_screenId;
     int m_screenCatalogGeneration = 0;
     QRect m_currentDesktopSourceRect;
@@ -198,6 +259,7 @@ private:
     quint64 m_lastMouseMoveSequence{0};
     bool m_mouseMoveBoundaryReady{false};
     QTimer *m_inputChannelRecoverTimer = nullptr;
+    QTimer *m_peerStartupTimer = nullptr;
     QTimer *m_streamConfigApplyTimer = nullptr;
     QTimer *m_streamConfigNotifyTimer = nullptr;
     QTimer *m_controlWatchdogTimer = nullptr;
@@ -207,6 +269,7 @@ private:
     std::atomic<qint64> m_lastSessionProgressMs{0};
     quint64 m_lastBufferedAmount = 0;
     quint64 m_heartbeatSequence = 0;
+    qint64 m_lastSessionHeartbeatSentMs = 0;
     std::atomic_bool m_heartbeatNegotiated{false};
     QTimer *m_disconnectGraceTimer = nullptr;
     QTimer *m_mediaStatsTimer = nullptr;
@@ -220,6 +283,7 @@ private:
     };
     QQueue<PendingDownload> m_pendingDownloads;
     bool m_downloadQueueActive = false;
+    int m_activeFileMutationTasks = 0;
     QMap<QString, QVector<QByteArray>> m_uploadFragments;
     mutable QMutex m_transferMutex;
     QHash<QString, qint64> m_cancelledTransfers;
@@ -233,6 +297,9 @@ private:
     QMap<QString, int> m_clipboardInboundTextNextIndexes;
     QMap<QString, qint64> m_clipboardInboundTextExpectedBytes;
     QMap<QString, bool> m_clipboardInboundTextPasteAfterApply;
+    QMap<QString, qint64> m_clipboardInboundTextDeadlinesMs;
+    qint64 m_clipboardInboundTextReservedBytes = 0;
+    QTimer *m_clipboardTextExpiryTimer = nullptr;
     QMap<QString, QByteArray> m_clipboardInboundPayloadChunks;
     QMap<QString, int> m_clipboardInboundPayloadChunkCounts;
     QMap<QString, int> m_clipboardInboundPayloadNextIndexes;
@@ -240,9 +307,12 @@ private:
     QMap<QString, bool> m_clipboardInboundPayloadPasteAfterApply;
     QMap<QString, qint64> m_clipboardInboundPayloadDeadlinesMs;
     qint64 m_clipboardInboundPayloadReservedBytes = 0;
+    QTimer *m_clipboardPayloadExpiryTimer = nullptr;
     QMap<QString, QByteArray> m_clipboardStreamChunks;
     QMap<QString, QString> m_clipboardStreamErrors;
     QMap<QString, qint64> m_pendingClipboardStreamRequests;
+    QSet<QString> m_activeClipboardStreamReadRequests;
+    int m_activeClipboardExpansionTasks = 0;
     QWaitCondition m_clipboardStreamWait;
     QTimer *m_clipboardSnapshotTimer = nullptr;
     QByteArray m_lastSentClipboardPayloadSignature;
@@ -264,6 +334,8 @@ private:
     QQueue<ClipboardChunkSendState> m_clipboardChunkSendQueue;
     qint64 m_clipboardChunkSendQueuedBytes = 0;
     bool m_clipboardChunkSendScheduled = false;
+    QQueue<QJsonObject> m_pendingClipboardControlMessages;
+    qint64 m_pendingClipboardControlMessageBytes = 0;
 
 signals:
     void shutdownFinished();
@@ -285,7 +357,8 @@ public slots:
     void shutdownAndMoveToOwnerThread(QObject *owner);
     void onWsCliRecvBinaryMsg(const QByteArray &message);
     void onWsCliRecvTextMsg(const QString &message);
-    void handleFileReceived(bool status, const QString &tempPath, const QString &errorMessage);
+    void handleFileReceived(bool status, const QString &tempPath, const QString &errorMessage,
+                            const QString &sha256 = QString());
     void recoverInputChannel();
     void checkControlAlive();
     void setDesktopLocked(bool locked);
@@ -304,6 +377,12 @@ public slots:
                                    const QString &encodePath,
                                    const QString &fallbackReason);
     void applyCaptureBackendState(const QString &captureBackend);
+    void enqueueCaptureState(const QString &captureMethod,
+                             const QString &capturePath,
+                             const QString &encodePath,
+                             const QString &fallbackReason,
+                             const QString &captureBackend);
+    void drainCaptureState();
 
 private slots:
     void startMediaCapture();
@@ -329,9 +408,15 @@ private slots:
     void onInputChannelOpen();
     void onInputChannelClosed();
     void handleInputChannelErrorOnThread(const QString &reason);
+    void onPeerStartupTimeout();
     void parseInputMsgIfAlive(const QJsonObject &object);
+    void enqueueInputMoveMessage(const QJsonObject &object);
+    void drainInputMoveMessage();
     void parseInputMsg(const QJsonObject &object);
     bool sendClipboardChannelMessage(const QJsonObject &message);
+    bool trySendClipboardChannelMessage(const QJsonObject &message);
+    void queueClipboardControlMessage(const QJsonObject &message);
+    void flushPendingClipboardControlMessages();
     void pollSessionHeartbeat();
     void sendSessionHeartbeat(const QString &action);
     void noteSessionInboundActivity();
@@ -351,8 +436,14 @@ private:
     void onFileChannelClosed();
     void onFileTextChannelOpen();
     void onFileTextChannelMessage(rtc::message_variant data);
+    void drainFileTextIngress();
+    void processFileTextChannelMessage(const QByteArray &messageBytes);
     void onFileTextChannelError(std::string error);
     void onFileTextChannelClosed();
+    void flushPendingFileTextMessages();
+    void queueFileTextMessage(const QJsonObject &message);
+    void flushPendingInputMessages();
+    void queueInputMessage(const QJsonObject &message);
     void onInputChannelMessage(rtc::message_variant data);
     void onInputChannelError(std::string error);
     void onInputMoveChannelOpen();
@@ -371,7 +462,9 @@ private:
     void connectClipboardMonitor();
     void scheduleLocalClipboardSnapshot(const QString &reason);
     void sendLocalClipboardSnapshot(const QString &requestId = QString());
-    void sendLocalClipboardSnapshotPayload(const QString &requestId, const QJsonObject &rawPayload);
+    void sendLocalClipboardSnapshotPayload(const QString &requestId,
+                                           const QJsonObject &rawPayload,
+                                           bool payloadAlreadyExpanded = false);
     bool sendClipboardPayloadInChunks(const QString &requestId,
                                       const QJsonObject &payload,
                                       bool pasteAfterApply = false,
@@ -402,14 +495,20 @@ private:
     void handleClipboardTextBegin(const QJsonObject &object);
     void handleClipboardTextChunk(const QJsonObject &object);
     void handleClipboardTextEnd(const QJsonObject &object);
+    void removeClipboardInboundTextLocked(const QString &requestId);
+    void expireClipboardTextRequests();
     void handleClipboardPayloadBegin(const QJsonObject &object);
     void handleClipboardPayloadChunk(const QJsonObject &object);
     void handleClipboardPayloadEnd(const QJsonObject &object);
     void removeClipboardInboundPayloadLocked(const QString &requestId);
     void expireClipboardPayloadRequests();
     void clearClipboardPayloadTransferState();
+    void wakeClipboardWaitersForShutdown();
     void onTerminalOutputReady(const QByteArray &data);
+    void scheduleTerminalBackpressurePoll();
     void pollTerminalBackpressure();
+    void queueTerminalEnd(const QString &type, int exitCode, const QString &error);
+    void sendPendingTerminalEnd();
     void onTerminalClosed(int exitCode);
     void onTerminalError(const QString &message);
     void onTerminalInfoReady(const QString &osName, const QString &shellPath, const QString &mode, bool pathTracking);
@@ -419,20 +518,32 @@ private:
     void setRemoteDescription(const QString &data, const QString &type);
     void addIceCandidate(const QString &candidate, const QString &mid);
 
-    void populateLocalFiles();
+    void populateLocalFiles(const QString &requestId = QString());
 
     void sendFile(const QString &cliPath, const QString &ctlPath, const QString &transferId);
     void processDownloadQueue();
     bool sendSingleFile(const QString &cliPath, const QString &ctlPath, const QString &transferId,
                         qint64 baseBytes = 0, qint64 totalBytes = -1, int currentFileIndex = 1, int totalFiles = 1);
+    void sendSingleFileAsync(const QString &cliPath, const QString &ctlPath, const QString &transferId,
+                             qint64 baseBytes = 0, qint64 totalBytes = -1, int currentFileIndex = 1, int totalFiles = 1,
+                             const std::function<void(bool)> &completion = {}, qint64 fileSizeHint = -1);
     void sendDirectory(const QString &cliPath, const QString &ctlPath, const QString &transferId);
+    void continueSendDirectory(const QString &cliPath, const QString &ctlPath, const QString &transferId,
+                               qint64 totalBytes, int totalFiles);
+    void continueSendDirectoryWithMetadata(const QString &cliPath, const QString &ctlPath, const QString &transferId,
+                                           qint64 totalBytes, int totalFiles, QVector<QJsonObject> metadataHeaders,
+                                           QVector<CliDirectoryFileEntry> fileEntries);
+    void processNextDownload();
     bool sendFileMetadataPacket(const QJsonObject &header, const QString &transferId = QString());
+    void sendFileMetadataPacketAsync(const QJsonObject &header, const QString &transferId,
+                                     const std::function<void(bool)> &completion);
     bool isTransferCancelled(const QString &transferId) const;
     void markTransferCancelled(const QString &transferId);
     void sendTransferProgress(const QString &transferId, qint64 transferredBytes, qint64 totalBytes, int transferredFiles, int totalFiles,
                               const QString &ctlPath = QString(), const QString &cliPath = QString());
     void sendTransferCancel(const QString &transferId);
-    qint64 collectDirectoryStats(const QString &path, int *fileCount) const;
+    qint64 collectDirectoryStats(const QString &path, int *fileCount,
+                                 const QString &transferId = QString()) const;
     void handleRemoteDescriptionMessage(const QJsonObject &object, const QString &type);
     void handleRemoteCandidateMessage(const QJsonObject &object);
     void addRemoteCandidateOrQueue(const QString &candidate, const QString &mid);

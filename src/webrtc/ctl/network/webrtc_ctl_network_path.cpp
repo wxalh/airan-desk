@@ -11,8 +11,10 @@ void WebRtcCtl::noteLocalNetworkCandidate(const QString &candidate)
     if (path.isEmpty())
         return;
 
-    if (!m_availableNetworkPaths.contains(path))
-        m_availableNetworkPaths.append(path);
+    if (m_availableNetworkPaths.contains(path))
+        return;
+
+    m_availableNetworkPaths.append(path);
     publishNetworkPathState();
 }
 
@@ -26,7 +28,18 @@ void WebRtcCtl::publishNetworkPathState(const QString &selectedPath)
             m_availableNetworkPaths.append(selectedPath);
     }
 
-    Q_EMIT networkPathStateChanged(orderedNetworkPaths(m_availableNetworkPaths),
-                                   m_selectedNetworkPath,
-                                   m_networkPath);
+    const QStringList availablePaths = orderedNetworkPaths(m_availableNetworkPaths);
+    if (m_hasPublishedNetworkPathState &&
+        availablePaths == m_lastPublishedNetworkPaths &&
+        m_selectedNetworkPath == m_lastPublishedSelectedNetworkPath &&
+        m_networkPath == m_lastPublishedRequestedNetworkPath)
+    {
+        return;
+    }
+
+    m_hasPublishedNetworkPathState = true;
+    m_lastPublishedNetworkPaths = availablePaths;
+    m_lastPublishedSelectedNetworkPath = m_selectedNetworkPath;
+    m_lastPublishedRequestedNetworkPath = m_networkPath;
+    Q_EMIT networkPathStateChanged(availablePaths, m_selectedNetworkPath, m_networkPath);
 }

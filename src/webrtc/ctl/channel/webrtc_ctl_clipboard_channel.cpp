@@ -45,8 +45,16 @@ constexpr qint64 kClipboardChunkSendMaxQueuedBytes = 64LL * 1024 * 1024;
 constexpr int kClipboardChunkSendBatchMessages = 32;
 constexpr int kClipboardChunkSendPollMs = 5;
 constexpr int kClipboardChunkSendTimeoutMs = 45000;
+constexpr int kMaxPendingClipboardControlMessages = 128;
+constexpr qint64 kMaxPendingClipboardControlMessageBytes = 2LL * 1024 * 1024;
+constexpr qint64 kMaxClipboardInboundTextBytes = 64LL * 1024 * 1024;
+constexpr int kClipboardTextReceiveTimeoutMs = 15000;
 constexpr qint64 kMaxClipboardInboundPayloadBytes = 64LL * 1024 * 1024;
 constexpr int kClipboardPayloadReceiveTimeoutMs = 45000;
+constexpr int kMaxClipboardStreamReadRequests = 32;
+constexpr int kMaxClipboardPromiseExpansionFiles = 100000;
+constexpr int kMaxClipboardRequestIdChars = 256;
+constexpr int kMaxClipboardPathChars = 32 * 1024;
 
 QString cleanPath(const QString &path)
 {
@@ -120,6 +128,7 @@ void appendPromiseFile(QJsonArray *files, const QString &path, const QString &re
 QJsonObject payloadWithExpandedPromiseFiles(const QJsonObject &payload)
 {
     QJsonArray promiseFiles;
+    bool expansionOverflowed = false;
     const QJsonArray files = JsonUtil::getArray(payload, Constant::KEY_FILES);
     for (const QJsonValue &value : files)
     {
@@ -135,10 +144,20 @@ QJsonObject payloadWithExpandedPromiseFiles(const QJsonObject &payload)
         const QString rootName = JsonUtil::getString(file, Constant::KEY_NAME, info.fileName());
         if (!info.isDir())
         {
+            if (promiseFiles.size() >= kMaxClipboardPromiseExpansionFiles)
+            {
+                expansionOverflowed = true;
+                break;
+            }
             appendPromiseFile(&promiseFiles, path, rootName, info);
             continue;
         }
 
+        if (promiseFiles.size() >= kMaxClipboardPromiseExpansionFiles)
+        {
+            expansionOverflowed = true;
+            break;
+        }
         appendPromiseFile(&promiseFiles, path, rootName, info);
         QDir rootDir(path);
         QDirIterator it(path,
@@ -146,11 +165,25 @@ QJsonObject payloadWithExpandedPromiseFiles(const QJsonObject &payload)
                         QDirIterator::Subdirectories);
         while (it.hasNext())
         {
+            if (promiseFiles.size() >= kMaxClipboardPromiseExpansionFiles)
+            {
+                expansionOverflowed = true;
+                break;
+            }
             const QString childPath = it.next();
             const QFileInfo childInfo = it.fileInfo();
             const QString relative = rootName + QLatin1Char('/') + rootDir.relativeFilePath(childPath);
             appendPromiseFile(&promiseFiles, childPath, relative, childInfo);
         }
+        if (expansionOverflowed)
+            break;
+    }
+
+    if (expansionOverflowed)
+    {
+        LOG_WARN("Clipboard promise expansion exceeded the safe file limit: limit={}",
+                 kMaxClipboardPromiseExpansionFiles);
+        return QJsonObject();
     }
 
     QJsonObject expanded = payload;
@@ -286,6 +319,7 @@ void WebRtcCtl::onClipboardChannelOpen()
     LOG_INFO("Clipboard channel opened");
     clearClipboardPayloadTransferState();
     m_remoteSupportsClipboardPayloadV2 = false;
+    flushPendingClipboardControlMessages();
     sendClipboardChannelObject(JsonUtil::createObject()
                                    .add(Constant::KEY_MSGTYPE, Constant::TYPE_CLIPBOARD_CAPABILITIES)
                                    .add(Constant::KEY_CLIPBOARD_PAYLOAD_V2, true)
@@ -305,10 +339,13 @@ void WebRtcCtl::onClipboardChannelClosed()
         });
         return;
     }
-    LOG_INFO("Clipboard channel closed");
+    LOG_INFO("Clipboard channel closed, reconnecting");
+    m_pendingClipboardControlMessages.clear();
+    m_pendingClipboardControlMessageBytes = 0;
     m_remoteSupportsClipboardPayloadV2 = false;
     failClipboardChunkSendQueue();
     clearClipboardPayloadTransferState();
+    requestSessionReconnect(tr("Clipboard channel closed, reconnecting..."));
 }
 
 void WebRtcCtl::onClipboardChannelError(const std::string &error)
@@ -325,10 +362,13 @@ void WebRtcCtl::onClipboardChannelError(const std::string &error)
         });
         return;
     }
-    LOG_ERROR("Clipboard channel error: {}", error);
+    LOG_ERROR("Clipboard channel error, reconnecting: {}", error);
+    m_pendingClipboardControlMessages.clear();
+    m_pendingClipboardControlMessageBytes = 0;
     m_remoteSupportsClipboardPayloadV2 = false;
     failClipboardChunkSendQueue();
     clearClipboardPayloadTransferState();
+    requestSessionReconnect(tr("Clipboard channel error, reconnecting..."));
 }
 
 void WebRtcCtl::onClipboardChannelMessage(const rtc::message_variant &message)
@@ -429,8 +469,74 @@ void WebRtcCtl::handleClipboardChannelObject(const QJsonObject &object)
     }
 }
 
+void WebRtcCtl::queueClipboardControlMessage(const QJsonObject &object)
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
+    const qint64 bytes = JsonUtil::toCompactBytes(object).size();
+    if (bytes > static_cast<qint64>(kMaxClipboardChannelMessageBytes) ||
+        m_pendingClipboardControlMessages.size() >= kMaxPendingClipboardControlMessages ||
+        bytes > kMaxPendingClipboardControlMessageBytes - m_pendingClipboardControlMessageBytes)
+    {
+        LOG_ERROR("Clipboard control queue overflow; reconnecting instead of dropping clipboard protocol data: size={}, queuedBytes={}, queuedMessages={}",
+                  bytes, m_pendingClipboardControlMessageBytes, m_pendingClipboardControlMessages.size());
+        requestSessionReconnect(tr("Clipboard control queue is full, reconnecting..."));
+        return;
+    }
+    m_pendingClipboardControlMessages.enqueue(object);
+    m_pendingClipboardControlMessageBytes += bytes;
+}
+
+
+void WebRtcCtl::flushPendingClipboardControlMessages()
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
+    if (!m_clipboardChannel || !m_clipboardChannel->isOpen())
+        return;
+
+    while (!m_pendingClipboardControlMessages.isEmpty())
+    {
+        const QJsonObject &object = m_pendingClipboardControlMessages.head();
+        if (!trySendClipboardChannelObject(object))
+            return;
+        m_pendingClipboardControlMessageBytes -= JsonUtil::toCompactBytes(object).size();
+        m_pendingClipboardControlMessages.dequeue();
+    }
+}
+
+
 bool WebRtcCtl::sendClipboardChannelObject(const QJsonObject &object)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return false;
+
+    if (!m_clipboardChannel || !m_clipboardChannel->isOpen())
+    {
+        queueClipboardControlMessage(object);
+        return false;
+    }
+
+    flushPendingClipboardControlMessages();
+    if (!m_pendingClipboardControlMessages.isEmpty())
+    {
+        queueClipboardControlMessage(object);
+        return false;
+    }
+    if (trySendClipboardChannelObject(object))
+        return true;
+    queueClipboardControlMessage(object);
+    return false;
+}
+
+
+bool WebRtcCtl::trySendClipboardChannelObject(const QJsonObject &object)
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return false;
+
     if (!m_clipboardChannel || !m_clipboardChannel->isOpen())
     {
         LOG_WARN("Clipboard channel is not ready");
@@ -467,11 +573,17 @@ bool WebRtcCtl::sendClipboardChannelObject(const QJsonObject &object)
 
 void WebRtcCtl::pasteClipboardPayloadToRemote(const QJsonObject &payload)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     sendClipboardPayloadToRemote(payload, true);
 }
 
 void WebRtcCtl::syncClipboardPayloadToRemote(const QJsonObject &payload)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     sendClipboardPayloadToRemote(payload, false);
 }
 
@@ -494,6 +606,14 @@ void WebRtcCtl::sendClipboardPayloadToRemote(const QJsonObject &payload, bool pa
     const QString requestId = uuidWithoutBraces();
     if (ClipboardUtil::payloadHasFiles(compatiblePayload))
     {
+        if (m_pendingClipboardUploadPayloads.size() >= kMaxClipboardPayloadRequests)
+        {
+            LOG_WARN("Dropping stale pending clipboard upload payloads: count={}",
+                     m_pendingClipboardUploadPayloads.size());
+            m_pendingClipboardUploadPayloads.clear();
+            m_pendingClipboardUploadPasteAfterApply.clear();
+            m_pendingClipboardUploadTargets.clear();
+        }
         m_pendingClipboardUploadPayloads.insert(requestId, compatiblePayload);
         m_pendingClipboardUploadPasteAfterApply.insert(requestId, pasteAfterApply);
         QJsonObject request = JsonUtil::createObject()
@@ -512,6 +632,9 @@ void WebRtcCtl::sendClipboardPayloadToRemote(const QJsonObject &payload, bool pa
 
 void WebRtcCtl::requestRemoteClipboardSnapshot()
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
+
     QJsonObject request = JsonUtil::createObject()
                               .add(Constant::KEY_MSGTYPE, Constant::TYPE_CLIPBOARD_REQUEST)
                               .add(Constant::KEY_REQUEST_ID, uuidWithoutBraces())
@@ -524,6 +647,13 @@ bool WebRtcCtl::startRemoteFileDrag(QWidget *dragSource,
                                     const QString &requestId,
                                     QString *errorMessage)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+    {
+        if (errorMessage)
+            *errorMessage = QCoreApplication::translate("WebRtcCtl", "Remote session is closed.");
+        return false;
+    }
+
     if (files.isEmpty())
     {
         if (errorMessage)
@@ -918,7 +1048,13 @@ void WebRtcCtl::drainClipboardChunkSendQueue()
            m_clipboardChannel->bufferedAmount() < kClipboardChunkSendHighWatermark)
     {
         ClipboardChunkSendState &state = m_clipboardChunkSendQueue.head();
-        if (!sendClipboardChannelObject(currentClipboardChunkMessage(state)))
+        flushPendingClipboardControlMessages();
+        if (!m_pendingClipboardControlMessages.isEmpty())
+        {
+            scheduleClipboardChunkSend(kClipboardChunkSendPollMs);
+            return;
+        }
+        if (!trySendClipboardChannelObject(currentClipboardChunkMessage(state)))
         {
             if (!m_clipboardChannel || !m_clipboardChannel->isOpen())
                 failClipboardChunkSendQueue();
@@ -1007,10 +1143,15 @@ void WebRtcCtl::handleClipboardTextBegin(const QJsonObject &object)
     }
 
     QMutexLocker locker(&m_transferMutex);
-    if (!m_clipboardInboundTextChunks.contains(requestId) &&
-        m_clipboardInboundTextChunks.size() >= kMaxClipboardTextRequests)
+    if (m_clipboardInboundTextChunks.contains(requestId))
     {
-        LOG_WARN("Rejected clipboard text begin: too many active requests");
+        LOG_WARN("Rejected duplicate clipboard text begin: requestId={}", requestId);
+        return;
+    }
+    if (m_clipboardInboundTextChunks.size() >= kMaxClipboardTextRequests ||
+        expectedBytes > kMaxClipboardInboundTextBytes - m_clipboardInboundTextReservedBytes)
+    {
+        LOG_WARN("Rejected clipboard text begin: request or memory limit exceeded");
         return;
     }
     m_clipboardInboundTextChunks.insert(requestId, QByteArray());
@@ -1018,6 +1159,18 @@ void WebRtcCtl::handleClipboardTextBegin(const QJsonObject &object)
     m_clipboardInboundTextNextIndexes.insert(requestId, 0);
     m_clipboardInboundTextExpectedBytes.insert(requestId, expectedBytes);
     m_clipboardInboundTextPasteAfterApply.insert(requestId, JsonUtil::getBool(object, Constant::KEY_PASTE_AFTER_APPLY, false));
+    m_clipboardInboundTextDeadlinesMs.insert(
+        requestId, QDateTime::currentMSecsSinceEpoch() + kClipboardTextReceiveTimeoutMs);
+    m_clipboardInboundTextReservedBytes += expectedBytes;
+    if (!m_clipboardTextExpiryTimer)
+    {
+        m_clipboardTextExpiryTimer = new QTimer(this);
+        m_clipboardTextExpiryTimer->setSingleShot(true);
+        connect(m_clipboardTextExpiryTimer, &QTimer::timeout,
+                this, &WebRtcCtl::expireClipboardTextRequests);
+    }
+    if (!m_clipboardTextExpiryTimer->isActive())
+        m_clipboardTextExpiryTimer->start(kClipboardTextReceiveTimeoutMs);
 }
 
 void WebRtcCtl::handleClipboardTextChunk(const QJsonObject &object)
@@ -1044,15 +1197,13 @@ void WebRtcCtl::handleClipboardTextChunk(const QJsonObject &object)
     {
         LOG_WARN("Rejected invalid clipboard text chunk: requestId={}, index={}, expected={}, size={}",
                  requestId, chunkIndex, nextIndex, chunk.size());
-        m_clipboardInboundTextChunks.remove(requestId);
-        m_clipboardInboundTextChunkCounts.remove(requestId);
-        m_clipboardInboundTextNextIndexes.remove(requestId);
-        m_clipboardInboundTextExpectedBytes.remove(requestId);
-        m_clipboardInboundTextPasteAfterApply.remove(requestId);
+        removeClipboardInboundTextLocked(requestId);
         return;
     }
     m_clipboardInboundTextChunks[requestId].append(chunk);
     m_clipboardInboundTextNextIndexes[requestId] = nextIndex + 1;
+    m_clipboardInboundTextDeadlinesMs[requestId] =
+        QDateTime::currentMSecsSinceEpoch() + kClipboardTextReceiveTimeoutMs;
 }
 
 void WebRtcCtl::handleClipboardTextEnd(const QJsonObject &object)
@@ -1072,11 +1223,9 @@ void WebRtcCtl::handleClipboardTextEnd(const QJsonObject &object)
                    JsonUtil::getInt(object, Constant::KEY_CHUNK_COUNT, 0) == expectedCount &&
                    m_clipboardInboundTextNextIndexes.value(requestId, -1) == expectedCount &&
                    m_clipboardInboundTextChunks.value(requestId).size() == expectedBytes;
-        textBytes = m_clipboardInboundTextChunks.take(requestId);
-        m_clipboardInboundTextChunkCounts.remove(requestId);
-        m_clipboardInboundTextNextIndexes.remove(requestId);
-        m_clipboardInboundTextExpectedBytes.remove(requestId);
-        pasteAfterApply = m_clipboardInboundTextPasteAfterApply.take(requestId);
+        textBytes = m_clipboardInboundTextChunks.value(requestId);
+        pasteAfterApply = m_clipboardInboundTextPasteAfterApply.value(requestId);
+        removeClipboardInboundTextLocked(requestId);
     }
     if (!complete || textBytes.isEmpty())
     {
@@ -1090,6 +1239,42 @@ void WebRtcCtl::handleClipboardTextEnd(const QJsonObject &object)
     emit localClipboardPayloadReceived(payload);
     if (pasteAfterApply && !m_remoteDesktopLocked)
         sendRemotePasteShortcut();
+}
+
+void WebRtcCtl::removeClipboardInboundTextLocked(const QString &requestId)
+{
+    const qint64 reservedBytes = m_clipboardInboundTextExpectedBytes.value(requestId, 0);
+    m_clipboardInboundTextReservedBytes = qMax<qint64>(0, m_clipboardInboundTextReservedBytes - reservedBytes);
+    m_clipboardInboundTextChunks.remove(requestId);
+    m_clipboardInboundTextChunkCounts.remove(requestId);
+    m_clipboardInboundTextNextIndexes.remove(requestId);
+    m_clipboardInboundTextExpectedBytes.remove(requestId);
+    m_clipboardInboundTextPasteAfterApply.remove(requestId);
+    m_clipboardInboundTextDeadlinesMs.remove(requestId);
+}
+
+void WebRtcCtl::expireClipboardTextRequests()
+{
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    qint64 nextDeadlineMs = 0;
+    {
+        QMutexLocker locker(&m_transferMutex);
+        const QStringList requestIds = m_clipboardInboundTextDeadlinesMs.keys();
+        for (const QString &requestId : requestIds)
+        {
+            const qint64 deadlineMs = m_clipboardInboundTextDeadlinesMs.value(requestId);
+            if (deadlineMs <= nowMs)
+            {
+                LOG_WARN("Expired incomplete clipboard text: requestId={}", requestId);
+                removeClipboardInboundTextLocked(requestId);
+                continue;
+            }
+            if (nextDeadlineMs == 0 || deadlineMs < nextDeadlineMs)
+                nextDeadlineMs = deadlineMs;
+        }
+    }
+    if (nextDeadlineMs > 0 && m_clipboardTextExpiryTimer)
+        m_clipboardTextExpiryTimer->start(static_cast<int>(qMax<qint64>(1, nextDeadlineMs - nowMs)));
 }
 
 void WebRtcCtl::handleClipboardPayloadBegin(const QJsonObject &object)
@@ -1130,11 +1315,15 @@ void WebRtcCtl::handleClipboardPayloadBegin(const QJsonObject &object)
     m_clipboardInboundPayloadDeadlinesMs.insert(
         requestId, QDateTime::currentMSecsSinceEpoch() + kClipboardPayloadReceiveTimeoutMs);
     m_clipboardInboundPayloadReservedBytes += expectedBytes;
-    const QPointer<WebRtcCtl> guard(this);
-    QTimer::singleShot(kClipboardPayloadReceiveTimeoutMs, this, [guard]() {
-        if (guard)
-            guard->expireClipboardPayloadRequests();
-    });
+    if (!m_clipboardPayloadExpiryTimer)
+    {
+        m_clipboardPayloadExpiryTimer = new QTimer(this);
+        m_clipboardPayloadExpiryTimer->setSingleShot(true);
+        connect(m_clipboardPayloadExpiryTimer, &QTimer::timeout,
+                this, &WebRtcCtl::expireClipboardPayloadRequests);
+    }
+    if (!m_clipboardPayloadExpiryTimer->isActive())
+        m_clipboardPayloadExpiryTimer->start(kClipboardPayloadReceiveTimeoutMs);
 }
 
 
@@ -1246,20 +1435,25 @@ void WebRtcCtl::expireClipboardPayloadRequests()
                 nextDeadlineMs = deadlineMs;
         }
     }
-    if (nextDeadlineMs > 0)
-    {
-        const QPointer<WebRtcCtl> guard(this);
-        QTimer::singleShot(static_cast<int>(qMax<qint64>(1, nextDeadlineMs - nowMs)), this, [guard]() {
-            if (guard)
-                guard->expireClipboardPayloadRequests();
-        });
-    }
+    if (nextDeadlineMs > 0 && m_clipboardPayloadExpiryTimer)
+        m_clipboardPayloadExpiryTimer->start(static_cast<int>(qMax<qint64>(1, nextDeadlineMs - nowMs)));
 }
 
 
 void WebRtcCtl::clearClipboardPayloadTransferState()
 {
     QMutexLocker locker(&m_transferMutex);
+    if (m_clipboardTextExpiryTimer)
+        m_clipboardTextExpiryTimer->stop();
+    if (m_clipboardPayloadExpiryTimer)
+        m_clipboardPayloadExpiryTimer->stop();
+    m_clipboardInboundTextChunks.clear();
+    m_clipboardInboundTextChunkCounts.clear();
+    m_clipboardInboundTextNextIndexes.clear();
+    m_clipboardInboundTextExpectedBytes.clear();
+    m_clipboardInboundTextPasteAfterApply.clear();
+    m_clipboardInboundTextDeadlinesMs.clear();
+    m_clipboardInboundTextReservedBytes = 0;
     m_clipboardInboundPayloadChunks.clear();
     m_clipboardInboundPayloadChunkCounts.clear();
     m_clipboardInboundPayloadNextIndexes.clear();
@@ -1335,6 +1529,23 @@ void WebRtcCtl::handleClipboardStreamReadRequest(const QJsonObject &object)
     const qint64 offset = JsonUtil::getInt64(object, Constant::KEY_OFFSET, 0);
     const qint64 length = JsonUtil::getInt64(object, Constant::KEY_LENGTH, 0);
 
+    const auto sendFailure = [this, requestId](const QString &error) {
+        sendClipboardChannelObject(JsonUtil::createObject()
+                                       .add(Constant::KEY_MSGTYPE, Constant::TYPE_CLIPBOARD_STREAM_READ_RESULT)
+                                       .add(Constant::KEY_REQUEST_ID, requestId.left(kMaxClipboardRequestIdChars))
+                                       .add(Constant::KEY_STATUS, false)
+                                       .add(Constant::KEY_ERROR, error)
+                                       .add(Constant::KEY_DATA, QString())
+                                       .build());
+    };
+    if (requestId.isEmpty() || requestId.size() > kMaxClipboardRequestIdChars ||
+        path.isEmpty() || path.size() > kMaxClipboardPathChars || offset < 0 ||
+        length <= 0 || length > kMaxClipboardFileChunkBytes)
+    {
+        sendFailure(QStringLiteral("Invalid clipboard stream read request."));
+        return;
+    }
+
     const QString cleanedCtlPath = cleanPath(path);
     QString transferId;
     QString targetPath;
@@ -1350,6 +1561,13 @@ void WebRtcCtl::handleClipboardStreamReadRequest(const QJsonObject &object)
             m_startedClipboardPromiseUploadSources.insert(cleanedCtlPath);
             shouldEmitStarted = true;
         }
+    }
+    if (transferId.isEmpty())
+    {
+        LOG_WARN("Rejected unauthorized clipboard stream read request: path={}, requestId={}",
+                 cleanedCtlPath, requestId);
+        sendFailure(QStringLiteral("Clipboard stream source is not authorized."));
+        return;
     }
     if (shouldEmitStarted && !transferId.isEmpty())
     {
@@ -1470,6 +1688,13 @@ void WebRtcCtl::handleClipboardSnapshot(const QJsonObject &object)
                                                         requestId));
         }
 
+        if (guard->m_pendingClipboardDownloadPayloads.size() >= kMaxClipboardPayloadRequests)
+        {
+            LOG_WARN("Dropping stale pending clipboard download payloads: count={}",
+                     guard->m_pendingClipboardDownloadPayloads.size());
+            guard->m_pendingClipboardDownloadPayloads.clear();
+            guard->m_pendingClipboardDownloadTargets.clear();
+        }
         guard->m_pendingClipboardDownloadPayloads.insert(
             requestId, payloadWithMappedFilePaths(payload, localPaths));
         guard->m_pendingClipboardDownloadTargets.insert(requestId, expectedTargets);
@@ -1698,6 +1923,13 @@ QByteArray WebRtcCtl::readRemoteClipboardFileChunk(const QString &baseRequestId,
 
         {
             QMutexLocker locker(&m_transferMutex);
+            if (m_pendingClipboardStreamRequests.size() >= kMaxClipboardStreamReadRequests)
+            {
+                if (errorMessage)
+                    *errorMessage = QCoreApplication::translate(
+                        "WebRtcCtl", "Too many clipboard stream reads are pending.");
+                return result;
+            }
             m_pendingClipboardStreamRequests.insert(requestId, requestBytes);
         }
 

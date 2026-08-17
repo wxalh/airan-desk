@@ -20,6 +20,7 @@ public:
     using ClosedCallback = std::function<void()>;
     using ErrorCallback = std::function<void(std::string)>;
     using MessageCallback = std::function<void(message_variant)>;
+    using SendCallback = std::function<void(bool success)>;
 
     explicit DataChannel(scoped_refptr<webrtc::DataChannelInterface> channel);
     ~DataChannel() override;
@@ -27,8 +28,10 @@ public:
     bool send(const std::string &message);
     bool send(const binary &data);
     bool send(const message_variant &message);
+    void sendAsync(const message_variant &message, SendCallback callback);
     void close();
     bool isOpen() const;
+    bool isClosed() const;
     uint64_t bufferedAmount() const;
     std::string label() const;
     void resetCallbacks();
