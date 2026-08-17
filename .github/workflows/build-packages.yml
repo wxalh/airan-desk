@@ -319,6 +319,7 @@ jobs:
               bash ./tools/build_linux_runtime_libva.sh
               bash ./tools/build_linux_runtime_pipewire.sh
               bash ./tools/prepare_third_party.sh "" linux linux-centos7-x64-m144-libcxx ffmpeg-n8.1-latest-linux64-lgpl-shared-8.1.tar.xz
+              AIRAN_PORTABLE_RUNTIME_SEARCH_PATH="/opt/airan-libcxx/lib:/opt/airan-toolchain/lib" \
               QMAKE=qmake-qt5 bash ./tools/build_package.sh \
                 --configure-preset linux-x64 \
                 --build-preset linux-x64 \

@@ -359,7 +359,14 @@ is_system_runtime() {
 }
 
 dependency_paths() {
-  LD_LIBRARY_PATH="$lib_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$1" 2>/dev/null |
+  local dependency_library_path="$lib_dir"
+  if [[ -n "${AIRAN_PORTABLE_RUNTIME_SEARCH_PATH:-}" ]]; then
+    dependency_library_path="$dependency_library_path:$AIRAN_PORTABLE_RUNTIME_SEARCH_PATH"
+  fi
+  if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+    dependency_library_path="$dependency_library_path:$LD_LIBRARY_PATH"
+  fi
+  LD_LIBRARY_PATH="$dependency_library_path" ldd "$1" 2>/dev/null |
     awk '/=> \// { print $3 } /^\// { print $1 }'
 }
 

@@ -22,7 +22,7 @@ for required_file in airan-desk airan-desk.real airan-desk-ensure-uinput-rule in
         exit 1
     fi
 done
-for required_file in LICENSE README.md README.en.md script/airan-notify.sh script/airan-notify.bat script/README.txt; do
+for required_file in LICENSE README.md README.en.md script/airan-notify.sh script/airan-notify.bat script/README.md; do
     if [ ! -f "$script_dir/$required_file" ]; then
         echo "Package payload is missing required file: $required_file" >&2
         exit 1
@@ -261,10 +261,10 @@ append_manifest "$app_datadir/remove-linux.sh"
 install -d "$bindir/script"
 install -m 0755 "$script_dir/script/airan-notify.sh" "$bindir/script/airan-notify.sh"
 install -m 0644 "$script_dir/script/airan-notify.bat" "$bindir/script/airan-notify.bat"
-install -m 0644 "$script_dir/script/README.txt" "$bindir/script/README.txt"
+install -m 0644 "$script_dir/script/README.md" "$bindir/script/README.md"
 append_manifest "$bindir/script/airan-notify.sh"
 append_manifest "$bindir/script/airan-notify.bat"
-append_manifest "$bindir/script/README.txt"
+append_manifest "$bindir/script/README.md"
 for document in LICENSE README.md README.en.md; do
     install -m 0644 "$script_dir/$document" "$app_datadir/$document"
     append_manifest "$app_datadir/$document"
