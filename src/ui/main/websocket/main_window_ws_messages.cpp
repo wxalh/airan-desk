@@ -45,6 +45,14 @@ void MainWindow::onWsCliRecvBinaryMsg(const QByteArray &message)
             }
 
             LOG_ERROR("Remote error: {}", data);
+            const QString role = JsonUtil::getString(object, Constant::KEY_ROLE);
+            if ((data == QStringLiteral("The controlled end may not be online") ||
+                 data == QStringLiteral("controlled_offline")) &&
+                role != Constant::ROLE_CTL)
+            {
+                LOG_WARN("Suppressing remote-offline popup on non-controller role: role={}", role);
+                return;
+            }
             if (RuntimeEnvironment::uiAvailable())
                 UiMessageBox::critical(nullptr, tr("Error"), localizedErrorMessage(data));
         }

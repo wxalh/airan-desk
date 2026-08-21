@@ -59,6 +59,7 @@ set(SRC_FILES
     src/terminal/emulator/core/native_terminal_widget_core.cpp
     src/terminal/emulator/core/native_terminal_widget_helpers.cpp
     src/terminal/emulator/input/native_terminal_widget_input.cpp
+    src/terminal/emulator/input/terminal_key_encoder.cpp
     src/terminal/emulator/core/native_terminal_widget_io.cpp
     src/terminal/emulator/input/native_terminal_widget_mouse.cpp
     src/terminal/emulator/input/native_terminal_widget_selection.cpp

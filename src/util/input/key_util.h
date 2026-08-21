@@ -13,6 +13,7 @@ private:
         m_KeyMap.insert(Qt::Key_Down,0x28);
         m_KeyMap.insert(Qt::Key_Backspace,0x08);
         m_KeyMap.insert(Qt::Key_Tab,0x09);
+        m_KeyMap.insert(Qt::Key_Backtab,0x09);
         m_KeyMap.insert(Qt::Key_Clear,0x0C);
         m_KeyMap.insert(Qt::Key_Return,0x0D);
         m_KeyMap.insert(Qt::Key_Enter,0x0D);
@@ -138,7 +139,33 @@ private:
         m_KeyMap.insert(Qt::Key_Menu,0x5D); /* ~ */
     }
 public:
-    static qint32 qtKeyToWinKey(qint32 qtKey){
+    static qint32 nativeModifierKey(quint32 nativeVirtualKey){
+#if defined(Q_OS_WIN)
+        switch (nativeVirtualKey)
+        {
+        case 0xA0: // VK_LSHIFT
+        case 0xA1: // VK_RSHIFT
+        case 0xA2: // VK_LCONTROL
+        case 0xA3: // VK_RCONTROL
+        case 0xA4: // VK_LMENU
+        case 0xA5: // VK_RMENU
+        case 0x5B: // VK_LWIN
+        case 0x5C: // VK_RWIN
+            return static_cast<qint32>(nativeVirtualKey);
+        default:
+            break;
+        }
+#else
+        Q_UNUSED(nativeVirtualKey);
+#endif
+        return 0;
+    }
+
+    static qint32 qtKeyToWinKey(qint32 qtKey, quint32 nativeVirtualKey = 0){
+        const qint32 nativeKey = nativeModifierKey(nativeVirtualKey);
+        if (nativeKey > 0)
+            return nativeKey;
+
         static QMap<qint32,qint32> m_KeyMap;
         if(m_KeyMap.empty()){
             initMap(m_KeyMap);

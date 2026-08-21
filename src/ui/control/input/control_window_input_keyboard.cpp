@@ -15,7 +15,11 @@ namespace
 {
 bool isClipboardModifier(Qt::KeyboardModifiers modifiers)
 {
-    return modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
+#if defined(Q_OS_MACOS)
+    return modifiers.testFlag(Qt::MetaModifier);
+#else
+    return modifiers.testFlag(Qt::ControlModifier);
+#endif
 }
 
 bool isClipboardCopyShortcut(QKeyEvent *event)
@@ -181,7 +185,13 @@ bool ControlWindow::handleRemoteKeyboardEvent(QKeyEvent *event, bool pressed)
         });
     }
 
-    const int winKey = KeyUtil::qtKeyToWinKey(event->key());
+    const int winKey = KeyUtil::qtKeyToWinKey(event->key(), event->nativeVirtualKey());
+    if (winKey <= 0)
+    {
+        LOG_DEBUG("Ignoring unsupported local key for remote keyboard forwarding: qtKey={}", event->key());
+        event->accept();
+        return true;
+    }
     if (pressed)
     {
         if (!event->isAutoRepeat() && !m_remotePressedKeys.contains(winKey))

@@ -1,4 +1,5 @@
 #include "terminal/emulator/native_terminal_widget.h"
+#include "terminal/emulator/input/terminal_key_encoder.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -8,7 +9,6 @@
 #include <QKeyEvent>
 #include <QResizeEvent>
 #include <QScrollBar>
-
 
 bool NativeTerminalWidget::event(QEvent *event)
 {
@@ -54,59 +54,26 @@ void NativeTerminalWidget::keyPressEvent(QKeyEvent *event)
         return;
     }
 
-    const VTermModifier modifiers = modifiersFromQt(event->modifiers());
-    VTermKey key = VTERM_KEY_NONE;
-    switch (event->key())
+    const QByteArray controlByte = TerminalKeyEncoder::controlByteForKey(
+        event->key(), event->modifiers());
+    if (!controlByte.isEmpty())
     {
-    case Qt::Key_Return:
-    case Qt::Key_Enter:
-        key = VTERM_KEY_ENTER;
-        break;
-    case Qt::Key_Tab:
-    case Qt::Key_Backtab:
-        key = VTERM_KEY_TAB;
-        break;
-    case Qt::Key_Backspace:
-        key = VTERM_KEY_BACKSPACE;
-        break;
-    case Qt::Key_Escape:
-        key = VTERM_KEY_ESCAPE;
-        break;
-    case Qt::Key_Up:
-        key = VTERM_KEY_UP;
-        break;
-    case Qt::Key_Down:
-        key = VTERM_KEY_DOWN;
-        break;
-    case Qt::Key_Left:
-        key = VTERM_KEY_LEFT;
-        break;
-    case Qt::Key_Right:
-        key = VTERM_KEY_RIGHT;
-        break;
-    case Qt::Key_Insert:
-        key = VTERM_KEY_INS;
-        break;
-    case Qt::Key_Delete:
-        key = VTERM_KEY_DEL;
-        break;
-    case Qt::Key_Home:
-        key = VTERM_KEY_HOME;
-        break;
-    case Qt::Key_End:
-        key = VTERM_KEY_END;
-        break;
-    case Qt::Key_PageUp:
-        key = VTERM_KEY_PAGEUP;
-        break;
-    case Qt::Key_PageDown:
-        key = VTERM_KEY_PAGEDOWN;
-        break;
-    default:
-        if (event->key() >= Qt::Key_F1 && event->key() <= Qt::Key_F12)
-            key = static_cast<VTermKey>(VTERM_KEY_FUNCTION(event->key() - Qt::Key_F1 + 1));
-        break;
+        sendInputBytes(controlByte);
+        event->accept();
+        return;
     }
+
+    const QByteArray escapeSequence = TerminalKeyEncoder::escapeSequenceForQtKey(
+        event->key(), event->modifiers());
+    if (!escapeSequence.isEmpty())
+    {
+        sendInputBytes(escapeSequence);
+        event->accept();
+        return;
+    }
+
+    const VTermModifier modifiers = modifiersFromQt(event->modifiers());
+    const VTermKey key = TerminalKeyEncoder::vtermKeyForQtKey(event->key(), event->modifiers());
 
     if (key != VTERM_KEY_NONE)
     {
