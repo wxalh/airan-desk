@@ -1,6 +1,10 @@
 ﻿#include "ui/control/control_window.h"
 
 #include <QFrame>
+#include <QApplication>
+#include <QCursor>
+#include <QMouseEvent>
+#include <QTimer>
 #include <QVBoxLayout>
 
 
@@ -22,12 +26,17 @@ void ControlWindow::createFloatingToolbar()
     m_floatingToolbar->setMouseTracking(true);
     m_floatingToolbar->setAttribute(Qt::WA_TransparentForMouseEvents, false);
     m_floatingToolbar->installEventFilter(this);
+    const QList<QWidget *> toolbarChildren = m_floatingToolbar->findChildren<QWidget *>();
+    for (QWidget *child : toolbarChildren)
+        child->setMouseTracking(true);
     m_statsLabel->installEventFilter(this);
     m_toolbarButtonRow->installEventFilter(this);
 
     updateToolbarPosition();
     m_floatingToolbar->raise();
     m_floatingToolbar->show();
+    m_toolbarShownPosition = m_floatingToolbar->pos();
+    m_toolbarAutoHideTimer->start(3000);
 }
 
 
@@ -51,4 +60,117 @@ void ControlWindow::setupFloatingToolbarFrame()
         "QComboBox:hover { background-color: rgba(82,82,82,230); border: 1px solid rgba(135,135,135,200); }"
         "QComboBox::drop-down { border: none; background: transparent; width: 20px; }"
         "QComboBox QAbstractItemView { background-color: rgb(42,42,42); border: 1px solid rgba(120,120,120,220); color: white; padding: 4px; outline: 0; selection-background-color: rgba(70,125,220,230); selection-color: white; }");
+
+    m_toolbarAutoHideTimer = new QTimer(this);
+    m_toolbarAutoHideTimer->setSingleShot(true);
+    connect(m_toolbarAutoHideTimer, &QTimer::timeout, this, [this]() {
+        if (isClosing() || !m_floatingToolbar || m_draggingToolbar)
+            return;
+        if (QApplication::activePopupWidget())
+        {
+            m_toolbarAutoHideTimer->start(3000);
+            return;
+        }
+        const QRect toolbarRect(m_floatingToolbar->mapToGlobal(QPoint(0, 0)),
+                                m_floatingToolbar->size());
+        if (toolbarRect.contains(QCursor::pos()))
+        {
+            m_toolbarAutoHideTimer->start(3000);
+            return;
+        }
+        setToolbarAutoHidden(true);
+    });
+}
+
+bool ControlWindow::handleToolbarAutoHideEvent(QObject *watched, QEvent *event)
+{
+    Q_UNUSED(watched)
+    if (!event || !m_floatingToolbar || !m_toolbarAutoHideTimer || isClosing())
+        return false;
+
+    QPoint globalPos;
+    if (event->type() == QEvent::MouseMove ||
+        event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::MouseButtonRelease)
+    {
+        globalPos = static_cast<QMouseEvent *>(event)->globalPos();
+    }
+    else if (event->type() == QEvent::Enter || event->type() == QEvent::Leave)
+    {
+        globalPos = QCursor::pos();
+    }
+    else
+    {
+        return false;
+    }
+
+    const QRect toolbarRect(m_floatingToolbar->mapToGlobal(QPoint(0, 0)),
+                            m_floatingToolbar->size());
+    if (m_toolbarAutoHidden)
+    {
+        if (toolbarRect.adjusted(-14, -14, 14, 14).contains(globalPos))
+        {
+            setToolbarAutoHidden(false);
+            m_toolbarAutoHideTimer->start(3000);
+        }
+        return false;
+    }
+
+    if (toolbarRect.contains(globalPos))
+        m_toolbarAutoHideTimer->stop();
+    else if (!m_draggingToolbar && !m_toolbarAutoHideTimer->isActive())
+        m_toolbarAutoHideTimer->start(3000);
+    return false;
+}
+
+void ControlWindow::setToolbarAutoHidden(bool hidden)
+{
+    if (!m_floatingToolbar || m_toolbarAutoHidden == hidden)
+        return;
+    QWidget *parent = m_floatingToolbar->parentWidget();
+    if (!parent)
+        return;
+
+    if (!hidden)
+    {
+        m_toolbarAutoHidden = false;
+        m_floatingToolbar->show();
+        m_floatingToolbar->move(m_toolbarShownPosition);
+        m_floatingToolbar->raise();
+        m_toolbarAutoHideTimer->start(3000);
+        return;
+    }
+
+    m_toolbarShownPosition = m_floatingToolbar->pos();
+    m_toolbarAutoHidden = true;
+    applyToolbarAutoHiddenPosition();
+    m_toolbarAutoHideTimer->stop();
+}
+
+void ControlWindow::applyToolbarAutoHiddenPosition()
+{
+    if (!m_floatingToolbar || !m_toolbarAutoHidden)
+        return;
+    QWidget *parent = m_floatingToolbar->parentWidget();
+    if (!parent)
+        return;
+
+    constexpr int visibleGrip = 8;
+    const QPoint shown = m_toolbarShownPosition;
+    const int left = qMax(0, shown.x());
+    const int top = qMax(0, shown.y());
+    const int right = qMax(0, parent->width() - shown.x() - m_floatingToolbar->width());
+    const int bottom = qMax(0, parent->height() - shown.y() - m_floatingToolbar->height());
+    const int nearest = qMin(qMin(left, right), qMin(top, bottom));
+    QPoint hidden = shown;
+    if (nearest == top)
+        hidden.setY(-m_floatingToolbar->height() + visibleGrip);
+    else if (nearest == bottom)
+        hidden.setY(parent->height() - visibleGrip);
+    else if (nearest == left)
+        hidden.setX(-m_floatingToolbar->width() + visibleGrip);
+    else
+        hidden.setX(parent->width() - visibleGrip);
+    m_floatingToolbar->move(hidden);
+    m_floatingToolbar->raise();
 }

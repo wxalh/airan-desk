@@ -84,18 +84,6 @@ QIcon makeControlledSessionTrayIcon(const QIcon &baseIcon, int count)
     return result;
 }
 
-QIcon makeEmptyControlledSessionTrayIcon()
-{
-    QIcon result;
-    const QList<int> sizes{16, 20, 24, 32, 48, 64};
-    for (int size : sizes)
-    {
-        QPixmap pixmap(size, size);
-        pixmap.fill(Qt::transparent);
-        result.addPixmap(pixmap);
-    }
-    return result;
-}
 } /* namespace */
 
 void MainWindow::initTray()
@@ -138,7 +126,6 @@ void MainWindow::initTray()
     m_trayIcon->setToolTip(windowTitle);
     m_trayIcon->setContextMenu(m_trayMenu);
     m_trayBaseIcon = qApp->windowIcon();
-    m_trayEmptyIcon = makeEmptyControlledSessionTrayIcon();
     m_trayIcon->setIcon(m_trayBaseIcon);
     m_traySessionClock.start();
     m_traySessionTimer = new QTimer(this);
@@ -158,12 +145,12 @@ void MainWindow::cleanupTray()
     if (!m_trayIcon)
         return;
 
+    if (m_traySessionTimer)
+        m_traySessionTimer->stop();
     m_trayIcon->hide();
     m_trayIcon->setContextMenu(nullptr);
     delete m_trayIcon;
     m_trayIcon = nullptr;
-    if (m_traySessionTimer)
-        m_traySessionTimer->stop();
     m_controlledTraySessions.clear();
 }
 
@@ -422,7 +409,10 @@ void MainWindow::updateControlledSessionTray()
     if (active)
     {
         m_trayConnectedIcon = makeControlledSessionTrayIcon(m_trayBaseIcon, count);
-        m_trayAttentionPhase = false;
+        // Keep a stable icon while a session is active. Some Linux tray
+        // implementations retain resources for every icon update, so the
+        // icon must only change when the session state changes.
+        m_trayIcon->setIcon(m_trayConnectedIcon);
     }
     m_trayStatusAction->setText(tr("Remote connection active (%1)").arg(count));
     m_trayStatusAction->setVisible(active);
@@ -472,7 +462,6 @@ void MainWindow::updateControlledSessionTray()
     if (!active && m_traySessionTimer)
     {
         m_traySessionTimer->stop();
-        m_trayAttentionPhase = false;
         m_trayIcon->setIcon(m_trayBaseIcon);
     }
     updateControlledSessionTrayPresentation();
@@ -486,14 +475,9 @@ void MainWindow::updateControlledSessionTrayPresentation()
     const int count = m_controlledTraySessions.size();
     if (count <= 0)
     {
-        m_trayAttentionPhase = false;
-        m_trayIcon->setIcon(m_trayBaseIcon);
         return;
     }
 
-    m_trayIcon->setIcon(
-        m_trayAttentionPhase ? m_trayEmptyIcon : m_trayConnectedIcon);
-    m_trayAttentionPhase = !m_trayAttentionPhase;
     const qint64 now = m_traySessionClock.elapsed();
     for (auto it = m_controlledTraySessions.begin(); it != m_controlledTraySessions.end(); ++it)
     {

@@ -75,6 +75,8 @@ bool ControlWindow::eventFilter(QObject *watched, QEvent *event)
         releaseRemotePressedKeys();
     }
 
+    if (handleToolbarAutoHideEvent(watched, event))
+        return true;
     if (handleToolbarDragEvent(watched, event))
         return true;
     if (handleAndroidNavigationDragEvent(watched, event))

@@ -24,6 +24,7 @@ void ControlWindow::initUI()
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setMinimumSize(320, 240);
     setFocusPolicy(Qt::StrongFocus);
+    setMouseTracking(true);
 
     setWindowTitle(tr("Remote: %1").arg(remote_id));
     setMenuWidget(new AppTitleBar(this, true, true, this));
@@ -110,12 +111,20 @@ void ControlWindow::initUI()
     centralLayout->addWidget(&scrollArea, 1);
 
     setCentralWidget(m_centralHost);
+    m_centralHost->setMouseTracking(true);
     createAndroidNavigationPanel();
     if (m_androidNavHost)
         centralLayout->addWidget(m_androidNavHost);
 
     setContentsMargins(0, 0, 0, 0);
     centralWidget()->setContentsMargins(0, 0, 0, 0);
+    if (QWidget *titleBar = menuWidget())
+    {
+        titleBar->setMouseTracking(true);
+        const QList<QWidget *> titleBarChildren = titleBar->findChildren<QWidget *>();
+        for (QWidget *child : titleBarChildren)
+            child->setMouseTracking(true);
+    }
     qApp->installEventFilter(this);
     setFocus(Qt::OtherFocusReason);
 }

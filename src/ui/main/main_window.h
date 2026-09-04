@@ -216,9 +216,7 @@ private:
     QTimer *m_traySessionTimer{nullptr};
     QElapsedTimer m_traySessionClock;
     QIcon m_trayBaseIcon;
-    QIcon m_trayEmptyIcon;
     QIcon m_trayConnectedIcon;
-    bool m_trayAttentionPhase{false};
     SettingsWindow *m_settingsWindow{nullptr};
     double m_uiScale{1.0};
     double m_dpiScale{1.0};

@@ -4,8 +4,8 @@
 1 24 "uac.manifest"
 
 1 VERSIONINFO
-FILEVERSION 1,1,3,0
-PRODUCTVERSION 1,1,3,0
+FILEVERSION 1,1,4,0
+PRODUCTVERSION 1,1,4,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS 0x40004L
@@ -18,11 +18,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "wxalh.com"
             VALUE "FileDescription", "airan-desk"
-            VALUE "FileVersion", "1.1.3"
+            VALUE "FileVersion", "1.1.4"
             VALUE "InternalName", "airan-desk"
             VALUE "OriginalFilename", "airan-desk.exe"
             VALUE "ProductName", "airan-desk"
-            VALUE "ProductVersion", "1.1.3"
+            VALUE "ProductVersion", "1.1.4"
             VALUE "LegalCopyright", "Airan-Desk source: Mozilla Public License 2.0"
             VALUE "Comments", "Third-party notices: licenses/Third-Party-Notices.md"
         END

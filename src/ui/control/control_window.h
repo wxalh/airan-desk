@@ -127,6 +127,9 @@ private:
     void beginAsyncShutdown();
     void finalizeCloseWhenStopped();
     bool handleToolbarDragEvent(QObject *watched, QEvent *event);
+    bool handleToolbarAutoHideEvent(QObject *watched, QEvent *event);
+    void setToolbarAutoHidden(bool hidden);
+    void applyToolbarAutoHiddenPosition();
     bool handleAndroidNavigationDragEvent(QObject *watched, QEvent *event);
     bool handleRemoteMouseMoveEvent(QObject *watched, QEvent *event);
     void sendRemoteMouseMoveAt(const QPoint &windowPos);
@@ -235,6 +238,9 @@ private:
     QPoint m_toolbarOffset;
     bool m_toolbarInSidePanel{false};
     bool m_toolbarUserMoved{false};
+    QTimer *m_toolbarAutoHideTimer{nullptr};
+    bool m_toolbarAutoHidden{false};
+    QPoint m_toolbarShownPosition;
     bool m_draggingAndroidNav{false};
     QPoint m_androidNavDragStart;
     QPoint m_androidNavStartPos;

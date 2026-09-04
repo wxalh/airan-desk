@@ -631,14 +631,33 @@ public:
         : m_cacheRoot(cacheRoot),
           m_reader(reader)
     {
+        QSet<QString> usedDisplayNames;
         for (const ClipboardFilePromiseItem &item : items)
         {
             PromiseFile file;
             file.item = item;
             file.item.displayName = cleanDisplayName(item);
+            const QString originalDisplayName = file.item.displayName;
+            int duplicateIndex = 2;
+            while (usedDisplayNames.contains(file.item.displayName.toCaseFolded()))
+            {
+                const int separator = originalDisplayName.lastIndexOf(QLatin1Char('.'));
+                const QString base = separator > 0 ? originalDisplayName.left(separator) : originalDisplayName;
+                const QString suffix = separator > 0 ? originalDisplayName.mid(separator) : QString();
+                file.item.displayName = QStringLiteral("%1 (%2)%3")
+                                            .arg(base)
+                                            .arg(duplicateIndex++)
+                                            .arg(suffix);
+            }
+            usedDisplayNames.insert(file.item.displayName.toCaseFolded());
             if (!m_cacheRoot.isEmpty() && !file.item.isDirectory)
             {
-                file.cacheFilePath = QDir(m_cacheRoot).filePath(QString(file.item.displayName).replace(QLatin1Char('\\'), QLatin1Char('/')));
+                // Use an ordinal cache name rather than the display name.  Windows
+                // paths are case-insensitive, so two remote files that differ only
+                // by case would otherwise share one cache file during a multi-file
+                // drag and corrupt each other's stream.
+                file.cacheFilePath = QDir(m_cacheRoot).filePath(
+                    QStringLiteral("%1.bin").arg(static_cast<qulonglong>(m_files.size()), 8, 10, QLatin1Char('0')));
                 file.cacheState = std::make_shared<PromiseCacheState>();
                 registerPromiseCacheState(m_cacheRoot, file.cacheState);
             }
@@ -721,9 +740,7 @@ public:
         if (matchesFormat(format, fileContentsFormat(), TYMED_ISTREAM))
         {
             int index = format->lindex;
-            if (index < 0)
-                index = 0;
-            if (index >= static_cast<int>(m_files.size()))
+            if (index < 0 || index >= static_cast<int>(m_files.size()))
                 return DV_E_LINDEX;
             if (m_files[static_cast<size_t>(index)].item.isDirectory)
                 return DV_E_FORMATETC;
@@ -753,9 +770,9 @@ public:
             return S_OK;
         if (matchesFormat(format, fileContentsFormat(), TYMED_ISTREAM))
         {
-            if (format->lindex >= static_cast<LONG>(m_files.size()))
+            if (format->lindex < 0 || format->lindex >= static_cast<LONG>(m_files.size()))
                 return DV_E_LINDEX;
-            if (format->lindex >= 0 && m_files[static_cast<size_t>(format->lindex)].item.isDirectory)
+            if (m_files[static_cast<size_t>(format->lindex)].item.isDirectory)
                 return DV_E_FORMATETC;
             return S_OK;
         }
@@ -820,6 +837,13 @@ public:
 
     HRESULT STDMETHODCALLTYPE StartOperation(IBindCtx *) override
     {
+        // Explorer may show an overwrite prompt and only fetch the stream after
+        // that prompt closes. Keep the data object alive until EndOperation.
+        if (!m_asyncReferenceHeld)
+        {
+            AddRef();
+            m_asyncReferenceHeld = true;
+        }
         m_inOperation = true;
         return S_OK;
     }
@@ -835,6 +859,11 @@ public:
     HRESULT STDMETHODCALLTYPE EndOperation(HRESULT, IBindCtx *, DWORD) override
     {
         m_inOperation = false;
+        if (m_asyncReferenceHeld)
+        {
+            m_asyncReferenceHeld = false;
+            Release();
+        }
         return S_OK;
     }
 
@@ -908,6 +937,7 @@ private:
     ClipboardFilePromise::ReadFileChunk m_reader;
     bool m_asyncMode = true;
     bool m_inOperation = false;
+    bool m_asyncReferenceHeld = false;
 };
 
 bool installNativePromise(const QList<ClipboardFilePromiseItem> &items,

@@ -85,4 +85,13 @@ void ControlWindow::updateToolbarPosition()
     }
     if (sidePanelMode)
         constrainAndroidNavigationPanel();
+
+    if (m_toolbarAutoHidden)
+    {
+        m_toolbarShownPosition.setX(qBound(0, m_toolbarShownPosition.x(),
+                                           qMax(0, toolbarParent->width() - m_floatingToolbar->width())));
+        m_toolbarShownPosition.setY(qBound(0, m_toolbarShownPosition.y(),
+                                           qMax(0, toolbarParent->height() - m_floatingToolbar->height())));
+        applyToolbarAutoHiddenPosition();
+    }
 }
