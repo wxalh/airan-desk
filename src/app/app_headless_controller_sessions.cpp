@@ -5,6 +5,7 @@
 #include "security/audit_session.h"
 #include "security/controlled_access_gate.h"
 #include "security/notification_script_runner.h"
+#include "security/runtime_environment.h"
 #include "util/config/config_util.h"
 #include "util/json/json_util.h"
 #include "webrtc/cli/lifecycle/webrtc_cli_session_shutdown.h"
@@ -151,6 +152,18 @@ void HeadlessController::startAuthorizedIncomingSession(const QString &sender,
                                     ? QStringLiteral("terminal")
                                     : (isOnlyFile ? QStringLiteral("file")
                                                   : QStringLiteral("desktop"));
+
+#if defined(Q_OS_LINUX)
+    if (!isOnlyFile && !RuntimeEnvironment::uiAvailable())
+    {
+        LOG_WARN("Rejecting desktop controlled session because no interactive desktop is available: sender={}, sessionId={}",
+                 sender,
+                 decision.sessionId);
+        sendIncomingConnectError(sender, QStringLiteral("no_interactive_desktop"), decision.sessionId);
+        finishUnusedAuditSession(decision.auditSession, QStringLiteral("no_interactive_desktop"));
+        return;
+    }
+#endif
 
     for (auto it = m_rtcCliSessions.cbegin(); it != m_rtcCliSessions.cend(); ++it)
     {

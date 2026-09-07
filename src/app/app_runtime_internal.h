@@ -2,7 +2,7 @@
 #define APP_RUNTIME_INTERNAL_H
 
 #ifndef AIRAN_DESK_VERSION
-#define AIRAN_DESK_VERSION "1.1.4"
+#define AIRAN_DESK_VERSION "1.1.5"
 #endif
 
 namespace AppRuntime

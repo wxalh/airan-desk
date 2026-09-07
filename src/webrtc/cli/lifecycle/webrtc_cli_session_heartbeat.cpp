@@ -5,7 +5,6 @@
 #include "util/qt/qt_callback_util.h"
 
 #include <QDateTime>
-#include <QMetaObject>
 #include <QPointer>
 #include <QThread>
 
@@ -31,7 +30,11 @@ void WebRtcCli::onHeartbeatChannelOpen()
         return;
     if (QThread::currentThread() != thread())
     {
-        QMetaObject::invokeMethod(this, "onHeartbeatChannelOpen", Qt::QueuedConnection);
+        const QPointer<WebRtcCli> guard(this);
+        m_callbackDispatcher->post([guard]() {
+            if (guard)
+                guard->onHeartbeatChannelOpen();
+        });
         return;
     }
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -79,7 +82,7 @@ void WebRtcCli::onHeartbeatChannelError(std::string error)
 
 void WebRtcCli::onHeartbeatChannelClosed()
 {
-    if (m_shutdownRequested.load() || m_shutdownStarted.load() || m_destroying)
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
         return;
     if (QThread::currentThread() != thread())
     {
@@ -90,6 +93,8 @@ void WebRtcCli::onHeartbeatChannelClosed()
         });
         return;
     }
+    if (m_destroying)
+        return;
     LOG_WARN("Session heartbeat channel closed; destroying stale controlled session");
     m_disconnectReason = QStringLiteral("heartbeat_channel_closed");
     emit destroyCli();

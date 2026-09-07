@@ -1,5 +1,6 @@
 #include "webrtc/cli/webrtc_cli.h"
 #include "security/audit_session.h"
+#include "security/runtime_environment.h"
 
 #include "common/qt_rtc_metatypes.h"
 #include "util/clipboard/native/clipboard_file_promise.h"
@@ -468,21 +469,40 @@ void WebRtcCli::onClipboardChannelClosed()
 
 void WebRtcCli::connectClipboardMonitor()
 {
-    if (m_clipboardMonitorConnected)
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() || m_clipboardMonitorConnected)
         return;
+    if (!RuntimeEnvironment::uiAvailable() ||
+        !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+    {
+        LOG_INFO("Clipboard monitor disabled because no interactive desktop is available");
+        return;
+    }
     QObject *guiContext = QCoreApplication::instance();
     if (!guiContext)
         return;
     m_clipboardMonitorConnected = true;
 
     const QPointer<WebRtcCli> guard(this);
-    QTimer::singleShot(0, guiContext, [guard]() {
-        if (!guard)
+    const auto callbackLifetime = m_callbackLifetime;
+    QTimer::singleShot(0, guiContext, [guard, callbackLifetime]() {
+        auto permit = callbackLifetime->tryEnter();
+        if (!permit || !guard || guard->m_shutdownRequested.load() || guard->m_shutdownStarted.load())
             return;
-        QClipboard *clipboard = QGuiApplication::clipboard();
+        QGuiApplication *guiApp =
+            qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+        if (!RuntimeEnvironment::uiAvailable() || !guiApp)
+        {
+            guard->m_callbackDispatcher->post([guard]() {
+                if (guard)
+                    guard->m_clipboardMonitorConnected = false;
+            });
+            LOG_INFO("Clipboard monitor disabled because the interactive desktop is unavailable");
+            return;
+        }
+        QClipboard *clipboard = guiApp->clipboard();
         if (!clipboard)
         {
-            QTimer::singleShot(0, guard.data(), [guard]() {
+            guard->m_callbackDispatcher->post([guard]() {
                 if (guard)
                     guard->m_clipboardMonitorConnected = false;
             });
