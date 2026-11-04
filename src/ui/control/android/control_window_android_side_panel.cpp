@@ -1,17 +1,21 @@
 ﻿#include "ui/control/control_window.h"
+#include "ui/common/adaptive_ui.h"
+#include "ui/control/control_window_view_helpers.h"
 
+#include <QLayout>
 
 void ControlWindow::updateAndroidSidePanelWidth()
 {
     if (!m_androidNavHost)
         return;
 
-    const bool sidePanelMode = isRemotePortrait();
-    const bool hostVisible = m_androidNavigationVisible || sidePanelMode;
+    const bool sidePanelMode = shouldPlaceToolbarInSidePanel();
+    const bool ready = isReceivedImg && !isClosing();
+    const bool hostVisible = ready && (m_androidNavigationVisible || sidePanelMode);
 
     m_androidNavHost->setVisible(hostVisible);
     if (m_androidNavPanel)
-        m_androidNavPanel->setVisible(m_androidNavigationVisible);
+        m_androidNavPanel->setVisible(ready && m_androidNavigationVisible);
 
     if (!hostVisible)
     {
@@ -21,13 +25,24 @@ void ControlWindow::updateAndroidSidePanelWidth()
 
     applyToolbarLayoutMode(sidePanelMode);
 
-    int width = 152;
-    if (sidePanelMode && m_floatingToolbar)
+    int panelWidth = UiAdaptive::scaled(sidePanelMode ? 180 : 152);
+    if (m_androidNavPanel)
     {
-        m_floatingToolbar->adjustSize();
-        width = qMax(width, m_floatingToolbar->width() + 16);
+        for (QPushButton *button : {m_androidBackBtn, m_androidHomeBtn, m_androidRecentsBtn})
+        {
+            fitControlButtonWidthToText(button);
+            if (button)
+                button->setMinimumHeight(UiAdaptive::scaled(30));
+        }
+        if (auto *layout = m_androidNavPanel->layout())
+        {
+            const int margin = UiAdaptive::scaled(10);
+            layout->setContentsMargins(margin, margin, margin, margin);
+            layout->setSpacing(UiAdaptive::scaled(6));
+        }
+        panelWidth = qMax(panelWidth, m_androidNavPanel->sizeHint().width() + UiAdaptive::scaled(16));
     }
-
-    m_androidNavHost->setFixedWidth(width);
+    panelWidth = qMin(panelWidth, qMax(1, width() / 2));
+    m_androidNavHost->setFixedWidth(panelWidth);
     m_androidNavHost->updateGeometry();
 }

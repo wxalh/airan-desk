@@ -13,6 +13,43 @@
 #include <QLineEdit>
 #include <QTableWidget>
 
+void TerminalFilePanel::confirmRemotePowerOperation(bool restart)
+{
+    if (!m_connected || !RuntimeEnvironment::uiAvailable())
+        return;
+
+    auto *confirmation = new QMessageBox(QMessageBox::Warning,
+                                         restart ? tr("Restart remote device") : tr("Shut down remote device"),
+                                         restart
+                                             ? tr("Restart the remote device? All connections will be interrupted and unsaved work may be lost.")
+                                             : tr("Shut down the remote device? All connections will be interrupted and unsaved work may be lost."),
+                                         QMessageBox::Yes | QMessageBox::Cancel, this);
+    confirmation->setAttribute(Qt::WA_DeleteOnClose);
+    confirmation->setWindowModality(Qt::WindowModal);
+    confirmation->setDefaultButton(QMessageBox::Cancel);
+    confirmation->setEscapeButton(QMessageBox::Cancel);
+    const quint64 generation = m_connectionGeneration;
+    connect(confirmation, &QMessageBox::finished, this, [this, restart, generation](int result) {
+        if (result != QMessageBox::Yes || !m_connected || generation != m_connectionGeneration)
+            return;
+        emit requestRemoteOperation(JsonUtil::createObject()
+                                        .add(Constant::KEY_MSGTYPE, Constant::TYPE_REMOTE_OPERATION)
+                                        .add(Constant::KEY_ACTION, restart ? QStringLiteral("restart") : QStringLiteral("shutdown"))
+                                        .build());
+    });
+    confirmation->open();
+}
+
+void TerminalFilePanel::recvRemoteOperation(bool status, const QString &action, const QString &errorMessage)
+{
+    if (status || !RuntimeEnvironment::uiAvailable())
+        return;
+    if (action != QStringLiteral("restart") && action != QStringLiteral("shutdown"))
+        return;
+    QMessageBox::warning(this, tr("Remote operation failed"),
+                         tr("The remote device could not complete the operation: %1").arg(errorMessage));
+}
+
 QStringList TerminalFilePanel::selectedRemotePaths() const
 {
     QStringList paths;

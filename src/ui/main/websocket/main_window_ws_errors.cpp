@@ -38,7 +38,7 @@ void MainWindow::handleDeviceIdConflict(const QJsonObject &object)
         return;
     }
     if (m_localIdEdit)
-        m_localIdEdit->setText(ConfigUtil->local_id);
+        m_localIdEdit->setPlainText(ConfigUtil->local_id);
     emit resetWsCliUrl(buildWsUrl());
 }
 

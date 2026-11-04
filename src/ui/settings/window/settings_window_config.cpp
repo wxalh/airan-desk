@@ -1,5 +1,7 @@
 #include "settings_window.h"
 
+#include "app/app_style.h"
+
 #include "media/codec/openh264/openh264_binary_manager.h"
 #include "security/audit_logger.h"
 #include "security/controlled_access_gate.h"
@@ -178,6 +180,9 @@ void SettingsWindow::saveSettings()
     m_pendingOpenH264Path = requestedOpenH264Path;
     if (previousWsUrl != ConfigUtil->wsUrl)
         emit signalingServerChanged();
+    m_openingTheme = appTheme();
+    m_openingScale = appScale();
+    m_appearanceSnapshotValid = true;
     const bool openH264RestartRequired =
         m_pendingOpenH264Enabled != ConfigUtil->openh264_enabled ||
         m_pendingOpenH264Path != ConfigUtil->openh264_library_path;

@@ -3,6 +3,7 @@
 #include "ui_file_transfer_window.h"
 
 #include <QPushButton>
+#include <QStyle>
 #include <QTableWidget>
 
 
@@ -53,8 +54,9 @@ void FileTransferWindow::finishTransferTask(const QString &transferId, bool stat
         task->cancelButton->setEnabled(false);
         task->cancelButton->setText(status ? tr("OK") : QStringLiteral("X"));
         task->cancelButton->setToolTip(status ? tr("Success") : tr("Failed"));
-        if (status)
-            task->cancelButton->setStyleSheet(task->cancelButton->styleSheet() + QStringLiteral("QPushButton#transferActionButton:disabled { color: #77d68a; }"));
+        task->cancelButton->setProperty("transferStatus", status ? QStringLiteral("success") : QStringLiteral("failed"));
+        task->cancelButton->style()->unpolish(task->cancelButton);
+        task->cancelButton->style()->polish(task->cancelButton);
         task->cancelButton->setCursor(Qt::ArrowCursor);
     }
 }
@@ -87,6 +89,9 @@ void FileTransferWindow::cancelTransferTask(const QString &transferId)
         task->cancelButton->setEnabled(false);
         task->cancelButton->setToolTip(tr("Canceled"));
         task->cancelButton->setText(QStringLiteral("X"));
+        task->cancelButton->setProperty("transferStatus", QStringLiteral("canceled"));
+        task->cancelButton->style()->unpolish(task->cancelButton);
+        task->cancelButton->style()->polish(task->cancelButton);
         task->cancelButton->setCursor(Qt::ArrowCursor);
     }
     if (task->batchExpectedItems <= 0)
@@ -109,6 +114,10 @@ void FileTransferWindow::failActiveTransfers(const QString &reason)
             task.cancelButton->setEnabled(false);
             task.cancelButton->setText(QStringLiteral("X"));
             task.cancelButton->setToolTip(tr("Failed: %1").arg(reason));
+            task.cancelButton->setProperty("transferStatus", QStringLiteral("failed"));
+            task.cancelButton->style()->unpolish(task.cancelButton);
+            task.cancelButton->style()->polish(task.cancelButton);
+            task.cancelButton->setCursor(Qt::ArrowCursor);
         }
     }
 }

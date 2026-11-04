@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QKeyEvent>
 #include <QCloseEvent>
+#include <QResizeEvent>
 #include <QTimer>
 #include <QMetaObject>
 #include <QFileInfo>

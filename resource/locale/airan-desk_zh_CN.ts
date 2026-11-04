@@ -206,6 +206,14 @@
 <context>
     <name>ControlWindow</name>
     <message>
+        <source>Connecting to remote device</source>
+        <translation>正在连接远程设备</translation>
+    </message>
+    <message>
+        <source>Connection failed</source>
+        <translation>连接失败</translation>
+    </message>
+    <message>
         <source>Remote Desktop</source>
         <translation>远程桌面</translation>
     </message>
@@ -913,6 +921,22 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</source>
 <context>
     <name>InputUtil</name>
     <message>
+        <source>The system power operation failed (Windows error %1).</source>
+        <translation>系统电源操作失败（Windows 错误 %1）。</translation>
+    </message>
+    <message>
+        <source>The system power operation failed (macOS error %1).</source>
+        <translation>系统电源操作失败（macOS 错误 %1）。</translation>
+    </message>
+    <message>
+        <source>The system power operation failed: %1 (errno %2). Root or CAP_SYS_BOOT is required.</source>
+        <translation>系统电源操作失败：%1（错误码 %2）。需要 root 或 CAP_SYS_BOOT 权限。</translation>
+    </message>
+    <message>
+        <source>System power operations are not supported on this platform.</source>
+        <translation>此平台不支持系统电源操作。</translation>
+    </message>
+    <message>
         <source>Administrator approval was canceled.</source>
         <translation>已取消管理员授权。</translation>
     </message>
@@ -1098,6 +1122,27 @@ Expected: %2</source>
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source>Home</source>
+        <translation>首页</translation>
+    </message>
+    <message>
+        <source>Remote connection</source>
+        <translation>远程连接</translation>
+    </message>
+    <message>
+        <source>Connect another device or share this device</source>
+        <translation>连接其他设备，或分享本机信息</translation>
+    </message>
+    <message>
+        <source>Share the local ID and verification code with the other person</source>
+        <translation>将本机 ID 和验证码提供给对方</translation>
+    </message>
+    <message>
+        <source>My devices</source>
+        <translation>我的设备</translation>
+    </message>
+
     <message>
         <source>airan</source>
         <translation>airan</translation>
@@ -1407,6 +1452,26 @@ Verification code: %3</source>
 </context>
 <context>
     <name>SettingsWindow</name>
+    <message>
+        <source>Appearance</source>
+        <translation>外观</translation>
+    </message>
+    <message>
+        <source>Interface scale</source>
+        <translation>界面缩放</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>浅色</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>深色</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1%</translation>
+    </message>
     <message>
         <source>Settings</source>
         <translation>设置</translation>
@@ -1902,6 +1967,30 @@ Verification code: %3</source>
 </context>
 <context>
     <name>TerminalFilePanel</name>
+    <message>
+        <source>Shut down remote device</source>
+        <translation>关闭远程设备</translation>
+    </message>
+    <message>
+        <source>Restart remote device</source>
+        <translation>重启远程设备</translation>
+    </message>
+    <message>
+        <source>Restart the remote device? All connections will be interrupted and unsaved work may be lost.</source>
+        <translation>确定要重启远程设备吗？所有连接将中断，未保存的工作可能丢失。</translation>
+    </message>
+    <message>
+        <source>Shut down the remote device? All connections will be interrupted and unsaved work may be lost.</source>
+        <translation>确定要关闭远程设备吗？所有连接将中断，未保存的工作可能丢失。</translation>
+    </message>
+    <message>
+        <source>Remote operation failed</source>
+        <translation>远程操作失败</translation>
+    </message>
+    <message>
+        <source>The remote device could not complete the operation: %1</source>
+        <translation>远程设备无法完成操作：%1</translation>
+    </message>
     <message>
         <source>Select download directory</source>
         <translation>选择下载目录</translation>
@@ -2411,6 +2500,10 @@ Verification code: %3</source>
 <context>
     <name>WebRtcCtl</name>
     <message>
+        <source>The connection is unavailable or busy. Please try again.</source>
+        <translation>连接不可用或正忙，请重试。</translation>
+    </message>
+    <message>
         <source>Control WebRTC connection created</source>
         <translation>控制端 WebRTC 连接已创建</translation>
     </message>
@@ -2768,6 +2861,324 @@ Verification code: %3</source>
     <message>
         <source>Trying to reconnect... (attempt %1)</source>
         <translation>正在尝试重连...（第 %1 次）</translation>
+    </message>
+</context>
+<context>
+    <name>DeviceManagerDialog</name>
+    <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Add device</source>
+        <translation>添加设备</translation>
+    </message>
+    <message>
+        <source>All groups</source>
+        <translation>全部分组</translation>
+    </message>
+    <message>
+        <source>Allow this system account to unlock my devices automatically.</source>
+        <translation>允许当前系统账户自动解锁我的设备。</translation>
+    </message>
+    <message>
+        <source>Change management password</source>
+        <translation>修改管理密码</translation>
+    </message>
+    <message>
+        <source>Confirm password</source>
+        <translation>确认密码</translation>
+    </message>
+    <message>
+        <source>Connection password</source>
+        <translation>连接密码</translation>
+    </message>
+    <message>
+        <source>Current management password</source>
+        <translation>当前管理密码</translation>
+    </message>
+    <message>
+        <source>Detected automatically for supported devices; can also be entered manually.</source>
+        <translation>支持的设备会自动识别，也可手动填写。</translation>
+    </message>
+    <message>
+        <source>Device ID</source>
+        <translation>设备编号</translation>
+    </message>
+    <message>
+        <source>Device ID and connection password are required.</source>
+        <translation>请填写设备编号和连接密码。</translation>
+    </message>
+    <message>
+        <source>Device details</source>
+        <translation>设备详情</translation>
+    </message>
+    <message>
+        <source>Devices are encrypted locally. Double-click a device to fill the home page.</source>
+        <translation>设备信息在本地加密保存，双击设备可回填首页。</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>编辑</translation>
+    </message>
+    <message>
+        <source>Enter your management password to unlock your saved devices.</source>
+        <translation>请输入管理密码以解锁已保存的设备。</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>分组</translation>
+    </message>
+    <message>
+        <source>Load to home</source>
+        <translation>加载到首页</translation>
+    </message>
+    <message>
+        <source>Lock and close</source>
+        <translation>锁定并关闭</translation>
+    </message>
+    <message>
+        <source>Management password</source>
+        <translation>管理密码</translation>
+    </message>
+    <message>
+        <source>My devices</source>
+        <translation>我的设备</translation>
+    </message>
+    <message>
+        <source>New management password</source>
+        <translation>新管理密码</translation>
+    </message>
+    <message>
+        <source>No saved devices. Add a device to get started.</source>
+        <translation>尚未保存设备，请先添加设备。</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation>备注</translation>
+    </message>
+    <message>
+        <source>Offline</source>
+        <translation>离线</translation>
+    </message>
+    <message>
+        <source>Online</source>
+        <translation>在线</translation>
+    </message>
+    <message>
+        <source>Operating system</source>
+        <translation>操作系统</translation>
+    </message>
+    <message>
+        <source>Refresh status</source>
+        <translation>刷新状态</translation>
+    </message>
+    <message>
+        <source>Remember management password permanently</source>
+        <translation>永久记住管理密码</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>移除</translation>
+    </message>
+    <message>
+        <source>Remove device</source>
+        <translation>移除设备</translation>
+    </message>
+    <message>
+        <source>Remove device %1 from my devices?</source>
+        <translation>从我的设备中移除设备 %1？</translation>
+    </message>
+    <message>
+        <source>Search device ID or note</source>
+        <translation>搜索设备编号或备注</translation>
+    </message>
+    <message>
+        <source>Set a separate management password to encrypt your saved devices. Use at least 8 characters. A forgotten password cannot be recovered.</source>
+        <translation>请设置独立的管理密码以加密设备信息，至少 8 个字符。遗忘密码将无法恢复设备库。</translation>
+    </message>
+    <message>
+        <source>Set management password</source>
+        <translation>设置管理密码</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>状态</translation>
+    </message>
+    <message>
+        <source>Status refreshes every 30 seconds. Unknown means the server is unavailable or the device does not support status queries.</source>
+        <translation>状态每 30 秒刷新一次。“未知”表示服务器不可用、设备未应答或不支持状态查询。</translation>
+    </message>
+    <message>
+        <source>This device ID is already saved.</source>
+        <translation>该设备编号已存在。</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>未知</translation>
+    </message>
+    <message>
+        <source>Unlock my devices</source>
+        <translation>解锁我的设备</translation>
+    </message>
+    <message>
+        <source>Use at least 8 characters and enter the same password twice.</source>
+        <translation>密码至少需要 8 个字符，且两次输入必须一致。</translation>
+    </message>
+</context>
+<context>
+    <name>DeviceVault</name>
+    <message>
+        <source>A local device file already exists. Unlock it to continue.</source>
+        <translation>本地设备文件已存在，请先解锁。</translation>
+    </message>
+    <message>
+        <source>Device data is invalid, too large, or contains duplicate device IDs.</source>
+        <translation>设备数据无效、超出大小限制，或包含重复的设备编号。</translation>
+    </message>
+    <message>
+        <source>Enter a non-empty device management password of at most 1024 characters.</source>
+        <translation>请输入非空的设备管理密码，最多 1024 个字符。</translation>
+    </message>
+    <message>
+        <source>Failed to restrict access to the remembered device key.</source>
+        <translation>无法限制记住的设备密钥的访问权限。</translation>
+    </message>
+    <message>
+        <source>Failed to save the remembered device key.</source>
+        <translation>无法保存记住的设备密钥。</translation>
+    </message>
+    <message>
+        <source>No device password has been remembered on this computer.</source>
+        <translation>此计算机尚未记住设备管理密码。</translation>
+    </message>
+    <message>
+        <source>Permanent password remembering requires secret-tool and an unlocked system keyring.</source>
+        <translation>永久记住密码需要安装 secret-tool 并解锁系统密钥环。</translation>
+    </message>
+    <message>
+        <source>The current device management password is incorrect.</source>
+        <translation>当前设备管理密码错误。</translation>
+    </message>
+    <message>
+        <source>The decrypted device data is invalid.</source>
+        <translation>解密后的设备数据无效。</translation>
+    </message>
+    <message>
+        <source>The device data could not be encrypted.</source>
+        <translation>无法加密设备数据。</translation>
+    </message>
+    <message>
+        <source>The device encryption key could not be created.</source>
+        <translation>无法创建设备加密密钥。</translation>
+    </message>
+    <message>
+        <source>The device encryption key is invalid.</source>
+        <translation>设备加密密钥无效。</translation>
+    </message>
+    <message>
+        <source>The device key could not be saved in macOS Keychain.</source>
+        <translation>无法将设备密钥保存到 macOS 钥匙串。</translation>
+    </message>
+    <message>
+        <source>The device list was changed by another window or process. Close and reopen My Devices before saving.</source>
+        <translation>设备列表已被其他窗口或进程修改，请关闭并重新打开“我的设备”后再保存。</translation>
+    </message>
+    <message>
+        <source>The device management password is incorrect, or the local device file has been damaged.</source>
+        <translation>设备管理密码错误，或本地设备文件已损坏。</translation>
+    </message>
+    <message>
+        <source>The device management password is incorrect.</source>
+        <translation>设备管理密码错误。</translation>
+    </message>
+    <message>
+        <source>The local device directory could not be created.</source>
+        <translation>无法创建本地设备目录。</translation>
+    </message>
+    <message>
+        <source>The local device file could not be opened.</source>
+        <translation>无法打开本地设备文件。</translation>
+    </message>
+    <message>
+        <source>The local device file could not be saved. Your previous data has been preserved.</source>
+        <translation>无法保存本地设备文件，原有数据已保留。</translation>
+    </message>
+    <message>
+        <source>The local device file has an invalid size.</source>
+        <translation>本地设备文件大小无效。</translation>
+    </message>
+    <message>
+        <source>The local device file is being used by another process. Please retry.</source>
+        <translation>本地设备文件正被其他进程使用，请重试。</translation>
+    </message>
+    <message>
+        <source>The local device file is invalid or uses an unsupported format.</source>
+        <translation>本地设备文件无效或格式不受支持。</translation>
+    </message>
+    <message>
+        <source>The local device file would exceed the size limit.</source>
+        <translation>本地设备文件将超出大小限制。</translation>
+    </message>
+    <message>
+        <source>The new device encryption key could not be created.</source>
+        <translation>无法创建新的设备加密密钥。</translation>
+    </message>
+    <message>
+        <source>The remembered device key cannot be unlocked by this Windows user.</source>
+        <translation>当前 Windows 用户无法解锁记住的设备密钥。</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be read from macOS Keychain.</source>
+        <translation>无法从 macOS 钥匙串读取记住的设备密钥。</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be read.</source>
+        <translation>无法读取记住的设备密钥。</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be removed from macOS Keychain.</source>
+        <translation>无法从 macOS 钥匙串移除记住的设备密钥。</translation>
+    </message>
+    <message>
+        <source>The remembered device key file could not be removed.</source>
+        <translation>无法移除记住的设备密钥文件。</translation>
+    </message>
+    <message>
+        <source>The remembered device key is invalid. Enter the device management password again.</source>
+        <translation>记住的设备密钥无效，请重新输入设备管理密码。</translation>
+    </message>
+    <message>
+        <source>The system credential store could not be started.</source>
+        <translation>无法启动系统凭据存储。</translation>
+    </message>
+    <message>
+        <source>The system credential store did not respond. Unlock the system keyring and retry.</source>
+        <translation>系统凭据存储未响应，请解锁系统密钥环后重试。</translation>
+    </message>
+    <message>
+        <source>The system credential store is unavailable or the remembered key is missing.</source>
+        <translation>系统凭据存储不可用，或记住的密钥已丢失。</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices and enter a non-empty new management password.</source>
+        <translation>请先解锁“我的设备”并输入非空的新管理密码。</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices before remembering the password.</source>
+        <translation>请先解锁“我的设备”再记住密码。</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices before saving changes.</source>
+        <translation>请先解锁“我的设备”再保存修改。</translation>
+    </message>
+    <message>
+        <source>Windows could not protect the remembered device key.</source>
+        <translation>Windows 无法保护记住的设备密钥。</translation>
     </message>
 </context>
 </TS>

@@ -1,5 +1,7 @@
 ﻿#include "app_title_bar_icons.h"
 
+#include "app/app_style.h"
+
 #include <QPainter>
 #include <QPixmap>
 
@@ -10,7 +12,8 @@ QIcon makeTitleBarIcon(TitleBarGlyph glyph)
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(QColor(131, 193, 224), 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    const QColor color(appTheme() == AppTheme::Dark ? QStringLiteral("#c9cdd4") : QStringLiteral("#606b7a"));
+    QPen pen(color, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
 

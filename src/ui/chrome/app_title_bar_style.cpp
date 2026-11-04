@@ -1,5 +1,6 @@
 ﻿#include "app_title_bar.h"
 #include "app_title_bar_icons.h"
+#include "app/app_style.h"
 
 #include <QApplication>
 #include <QGuiApplication>
@@ -29,7 +30,7 @@ void AppTitleBar::applyScale()
     if (m_titleLabel)
     {
         QFont font = m_titleLabel->font();
-        font.setPointSizeF(13.0 * scaleValue / dpiScale());
+        font.setPointSizeF(10.0 * scaleValue);
         font.setBold(true);
         m_titleLabel->setFont(font);
     }
@@ -102,24 +103,16 @@ double AppTitleBar::dpiScale() const
 
 double AppTitleBar::effectiveScale() const
 {
-    return m_scale * (m_customScale ? 1.0 : dpiScale());
+    // Qt already maps these logical dimensions to the screen's device pixels.
+    return m_customScale ? m_scale : m_scale * appScale();
 }
 
 
 void AppTitleBar::applyStyle()
 {
-    setStyleSheet(QStringLiteral(
-        "#appTitleBar { background: #181818; border-bottom: 1px solid #2a2a2a; }"
-        "#appTitleBarTitle { color: rgb(131,193,224); font-weight: 600; }"
-        "QPushButton { background: transparent; border: none; color: rgb(131,193,224);"
-        "              border-radius: 4px; padding: 0; }"
-        "QPushButton:hover { background: #3a3a3a; color: white; }"
-        "QPushButton:pressed { background: #4a4a4a; color: white; }"
-        "#appTitleBarMinimize:hover, #appTitleBarMaximize:hover { background: #3a3a3a; color: white; }"
-        "#appTitleBar #appTitleBarMinimize[titleBarHover=\"true\"],"
-        "#appTitleBar #appTitleBarMaximize[titleBarHover=\"true\"] { background: #3a3a3a; color: white; }"
-        "#appTitleBarMinimize:pressed, #appTitleBarMaximize:pressed { background: #4a4a4a; color: white; }"
-        "#appTitleBarClose:hover { background: #c84456; color: white; }"
-        "#appTitleBar #appTitleBarClose[titleBarHover=\"true\"] { background: #c84456; color: white; }"
-        "#appTitleBarClose:pressed { background: #a83242; color: white; }"));
+    if (m_minimizeButton)
+        m_minimizeButton->setIcon(makeTitleBarIcon(TitleBarGlyph::Minimize));
+    if (m_closeButton)
+        m_closeButton->setIcon(makeTitleBarIcon(TitleBarGlyph::Close));
+    updateMaximizeButton();
 }

@@ -474,6 +474,7 @@ signals:
     void recvDeleteFileRes(bool status, const QString &filePath, const QString &errorMessage);
     void recvRenameFileRes(bool status, const QString &filePath, const QString &errorMessage);
     void recvCreateFileRes(bool status, const QString &filePath, bool isDirectory, const QString &errorMessage);
+    void recvRemoteOperationRes(bool status, const QString &action, const QString &errorMessage);
     void fileTransferStarted(const QString &transferId, const QString &sourcePath, const QString &targetPath, const QString &operation);
     void fileTransferProgress(const QString &transferId, qint64 transferredBytes, qint64 totalBytes, int transferredFiles, int totalFiles);
     void fileTextChannelOpened();

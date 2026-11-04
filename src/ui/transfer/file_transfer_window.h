@@ -35,6 +35,8 @@ namespace Ui
 }
 
 class QCloseEvent;
+class QResizeEvent;
+class QSplitter;
 
 class FileTransferWindow : public QWidget
 {
@@ -66,6 +68,7 @@ signals:
     void cancelFileTransfer(const QString &transferId);
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 public slots:
     
@@ -147,6 +150,7 @@ private:
     void setupFileTables();
     
     void setupLogTable();
+    void updateResponsivePaneLayout();
     bool isExecutableFileName(const QString &fileName) const;
     bool isLocalExecutableFile(const QFileInfo &fileInfo) const;
     bool isRemoteExecutableFile(const QTableWidgetItem *item) const;
@@ -194,6 +198,8 @@ private:
     void finalizeCloseWhenStopped();
 
     Ui::FileTransferWindow *ui;
+    QSplitter *m_devicePanes{nullptr};
+    Qt::Orientation m_devicePanesOrientation{Qt::Horizontal};
     bool connected;
     QLabel label;
     QString remote_id;

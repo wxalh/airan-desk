@@ -1,5 +1,6 @@
 #include "ui/control/control_window.h"
 #include "ui/control/control_window_view_helpers.h"
+#include "ui/common/adaptive_ui.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -32,14 +33,13 @@ QAction *ControlWindow::addToolbarCheckedAction(QMenu *menu, QActionGroup *group
 void ControlWindow::createToolbarStatsLabel(QVBoxLayout *mainLayout)
 {
     m_statsLabel = new QLabel(tr("FPS: -- | Kbps: -- | Resolution: -- | Video: --\nCapture: -- | Encoder: -- | Audio: -- | Network: -- | Display: --"), m_floatingToolbar);
+    m_statsLabel->setObjectName(QStringLiteral("remoteToolbarStats"));
     m_statsLabel->setToolTip(tr("Shows FPS, bitrate, resolution, codec, capture method, encoder, audio, network path, and display mode"));
     m_statsLabel->setAlignment(Qt::AlignCenter);
     m_statsLabel->setWordWrap(true);
 
-    QFontMetrics statsFm(m_statsLabel->font());
-    const int statsTextW = controlWindowTextWidth(statsFm, m_statsLabel->text());
-    const int minAdaptive = qMax(220, statsTextW + 24);
-    m_statsLabel->setMinimumWidth(minAdaptive);
+    m_statsLabel->setMinimumWidth(0);
+    m_statsLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     mainLayout->addWidget(m_statsLabel);
 }
 
@@ -49,10 +49,11 @@ void ControlWindow::createToolbarStatsLabel(QVBoxLayout *mainLayout)
 void ControlWindow::createToolbarButtonRow()
 {
     m_toolbarButtonRow = new QWidget(m_floatingToolbar);
+    m_toolbarButtonRow->setObjectName(QStringLiteral("remoteToolbarButtonRow"));
     m_toolbarButtonRow->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     m_toolbarButtonLayout = new QBoxLayout(QBoxLayout::LeftToRight, m_toolbarButtonRow);
     m_toolbarButtonLayout->setSizeConstraint(QLayout::SetFixedSize);
-    m_toolbarButtonLayout->setSpacing(4);
+    m_toolbarButtonLayout->setSpacing(UiAdaptive::scaled(4));
     m_toolbarButtonLayout->setContentsMargins(0, 0, 0, 0);
 }
 

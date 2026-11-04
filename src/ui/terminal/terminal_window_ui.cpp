@@ -19,7 +19,7 @@ void TerminalWindow::initUI()
     setAttribute(Qt::WA_DeleteOnClose);
     setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     setWindowTitle(tr("Terminal: %1").arg(m_remoteId));
-    const QSize windowSize = UiAdaptive::applyAdaptiveWindowSize(this, QSize(980, 620), QSize(560, 360));
+    const QSize windowSize = UiAdaptive::applyPreferredWindowSize(this, QSize(960, 720), QSize(560, 360));
 
     auto *titleBar = new AppTitleBar(this, true, true, this);
     ui->titleBarHost->setFixedHeight(titleBar->height());
@@ -27,7 +27,7 @@ void TerminalWindow::initUI()
     connect(titleBar, &AppTitleBar::uiScaleChanged, this, [this, titleBar]() {
         ui->titleBarHost->setFixedHeight(titleBar->height());
     });
-    ui->terminalToolsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    ui->terminalToolsWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
     ui->rootLayout->setStretch(0, 0);
     ui->rootLayout->setStretch(1, 0);
     ui->rootLayout->setStretch(2, 1);
@@ -41,7 +41,8 @@ void TerminalWindow::initUI()
     ui->terminalSplitter->addWidget(m_terminal);
     ui->terminalSplitter->setStretchFactor(0, 0);
     ui->terminalSplitter->setStretchFactor(1, 1);
-    ui->terminalSplitter->setSizes({qMax(220, windowSize.width() / 3), qMax(420, windowSize.width() * 2 / 3)});
+    const int panelWidth = qBound(160, windowSize.width() / 3, windowSize.width() - 360);
+    ui->terminalSplitter->setSizes({panelWidth, windowSize.width() - panelWidth});
 
     connect(m_terminal, &NativeTerminalWidget::inputGenerated, this, &TerminalWindow::sendTerminalInput);
     connect(m_terminal, &NativeTerminalWidget::gridSizeChanged, this, &TerminalWindow::sendTerminalResize);

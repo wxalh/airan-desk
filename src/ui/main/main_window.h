@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QElapsedTimer>
 #include <QIcon>
+#include <QPlainTextEdit>
 
 #include <atomic>
 #include <memory>
@@ -24,6 +25,8 @@ class QKeyEvent;
 class QLabel;
 class QLineEdit;
 class QRadioButton;
+class QGridLayout;
+class QScrollArea;
 class QScreen;
 class QTimer;
 class QWidget;
@@ -94,6 +97,7 @@ private slots:
     void onDestroyWebRtcCli();
     void showWindowFromTray();
     void openSettingsFromTray();
+    void openMyDevices();
     void quitFromTray();
     void disconnectAllControlledSessions();
     void disconnectControlledSessionFromAction();
@@ -121,6 +125,7 @@ private:
     void initTray();
     void cleanupTray();
     void bindUiObjects();
+    void buildMainContentLayout();
     void applyMainScale();
     void layoutMainContent();
     void scheduleMainLayoutRefresh();
@@ -155,6 +160,9 @@ private:
     };
 
     QWidget *m_content{nullptr};
+    QWidget *m_localPanel{nullptr};
+    QWidget *m_remotePanel{nullptr};
+    QGridLayout *m_mainPanelGrid{nullptr};
     AppTitleBar *m_titleBar{nullptr};
     QLabel *m_allowControlLabel{nullptr};
     QLabel *m_localIdLabel{nullptr};
@@ -164,8 +172,8 @@ private:
     QLabel *m_remotePwdLabel{nullptr};
     QLabel *m_wsConnectStatus{nullptr};
     QLabel *m_versionLabel{nullptr};
-    QLineEdit *m_localIdEdit{nullptr};
-    QLineEdit *m_localPwdEdit{nullptr};
+    QPlainTextEdit *m_localIdEdit{nullptr};
+    QPlainTextEdit *m_localPwdEdit{nullptr};
     QLineEdit *m_remoteIdEdit{nullptr};
     QLineEdit *m_remotePwdEdit{nullptr};
     QWidget *m_localIdBorder{nullptr};
@@ -179,6 +187,7 @@ private:
     QPushButton *m_localPwdChangeButton{nullptr};
     QPushButton *m_localShareButton{nullptr};
     QPushButton *m_settingsButton{nullptr};
+    QPushButton *m_myDevicesButton{nullptr};
     QWidget *m_connectDivider{nullptr};
     QWidget *m_localPwdChangeDivider{nullptr};
     QWidget *m_localShareDivider{nullptr};
@@ -203,6 +212,7 @@ private:
     QTimer *m_desktopScreenChangeTimer{nullptr};
     bool isCaptureing;
     bool m_remoteShareParsing{false};
+    bool m_centeredOnFirstShow{false};
     bool m_desktopLocked{false};
     QSystemTrayIcon *m_trayIcon{nullptr};
     QMenu *m_trayMenu{nullptr};

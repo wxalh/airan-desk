@@ -363,6 +363,13 @@ void WebRtcCli::parseFileMsg(const QJsonObject &object)
     {
         handleRunFile(object);
     }
+    else if (msgType == Constant::TYPE_REMOTE_OPERATION)
+    {
+        // The authenticated terminal channel only exposes power operations.
+        const QString action = JsonUtil::getString(object, Constant::KEY_ACTION);
+        if (action == QStringLiteral("shutdown") || action == QStringLiteral("restart"))
+            handleRemoteOperation(object);
+    }
     else if (msgType == Constant::TYPE_FILE_TRANSFER_CANCEL)
     {
         handleFileTransferCancel(object);

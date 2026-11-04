@@ -75,4 +75,6 @@ void MainWindow::layoutMainActionButtons(const MainWindowLayoutMetrics &metrics)
 
     m_settingsButton->setGeometry(metrics.contentW - scaled(44), scaled(12), scaled(36), scaled(36));
     m_settingsButton->setIconSize(QSize(scaled(20), scaled(20)));
+    m_myDevicesButton->setFont(scaledFont(11));
+    m_myDevicesButton->setGeometry(metrics.contentW - scaled(196), scaled(12), scaled(142), scaled(36));
 }

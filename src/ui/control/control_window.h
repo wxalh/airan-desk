@@ -48,6 +48,10 @@ class QToolButton;
 class QVBoxLayout;
 class QDialog;
 class QTableWidget;
+namespace ControlConnectionProgress
+{
+class View;
+}
 #if defined(_WIN32) && defined(AIRAN_WEBRTC_WINDOWS_PLATFORM_WIN10)
 class D3D11VideoWidget;
 #endif
@@ -188,6 +192,7 @@ private:
     QWidget *m_androidNavHost{nullptr};
     QFrame *m_androidNavPanel{nullptr};
     QWidget *m_toolbarButtonRow{nullptr};
+    QScrollArea *m_toolbarScrollArea{nullptr};
     QBoxLayout *m_toolbarButtonLayout{nullptr};
     QList<QToolButton *> m_sideMenuButtons;
     QLabel *m_statsLabel;
@@ -226,6 +231,7 @@ private:
     QMenu *m_screenMenu{nullptr};
     QList<int> m_connectionStepStates;
     QString m_connectionFailureReason;
+    ControlConnectionProgress::View *m_connectionProgressView{nullptr};
     QHash<QString, TransferRecord> m_transferRecords;
     QHash<QString, QString> m_transferPathToId;
     QByteArray m_lastObservedClipboardSignature;
@@ -240,6 +246,7 @@ private:
     bool m_toolbarUserMoved{false};
     QTimer *m_toolbarAutoHideTimer{nullptr};
     bool m_toolbarAutoHidden{false};
+    bool m_toolbarLayoutRefreshPending{false};
     QPoint m_toolbarShownPosition;
     bool m_draggingAndroidNav{false};
     QPoint m_androidNavDragStart;

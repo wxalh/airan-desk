@@ -206,6 +206,14 @@
 <context>
     <name>ControlWindow</name>
     <message>
+        <source>Connecting to remote device</source>
+        <translation>Connecting to remote device</translation>
+    </message>
+    <message>
+        <source>Connection failed</source>
+        <translation>Connection failed</translation>
+    </message>
+    <message>
         <source>Remote Desktop</source>
         <translation>Remote Desktop</translation>
     </message>
@@ -913,6 +921,22 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</translatio
 <context>
     <name>InputUtil</name>
     <message>
+        <source>The system power operation failed (Windows error %1).</source>
+        <translation>The system power operation failed (Windows error %1).</translation>
+    </message>
+    <message>
+        <source>The system power operation failed (macOS error %1).</source>
+        <translation>The system power operation failed (macOS error %1).</translation>
+    </message>
+    <message>
+        <source>The system power operation failed: %1 (errno %2). Root or CAP_SYS_BOOT is required.</source>
+        <translation>The system power operation failed: %1 (errno %2). Root or CAP_SYS_BOOT is required.</translation>
+    </message>
+    <message>
+        <source>System power operations are not supported on this platform.</source>
+        <translation>System power operations are not supported on this platform.</translation>
+    </message>
+    <message>
         <source>Administrator approval was canceled.</source>
         <translation>Administrator approval was canceled.</translation>
     </message>
@@ -1098,6 +1122,27 @@ Expected: %2</translation>
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source>Home</source>
+        <translation>Home</translation>
+    </message>
+    <message>
+        <source>Remote connection</source>
+        <translation>Remote connection</translation>
+    </message>
+    <message>
+        <source>Connect another device or share this device</source>
+        <translation>Connect another device or share this device</translation>
+    </message>
+    <message>
+        <source>Share the local ID and verification code with the other person</source>
+        <translation>Share the local ID and verification code with the other person</translation>
+    </message>
+    <message>
+        <source>My devices</source>
+        <translation>My devices</translation>
+    </message>
+
     <message>
         <source>airan</source>
         <translation>airan</translation>
@@ -1407,6 +1452,26 @@ Verification code: %3</translation>
 </context>
 <context>
     <name>SettingsWindow</name>
+    <message>
+        <source>Appearance</source>
+        <translation>Appearance</translation>
+    </message>
+    <message>
+        <source>Interface scale</source>
+        <translation>Interface scale</translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation>Light</translation>
+    </message>
+    <message>
+        <source>Dark</source>
+        <translation>Dark</translation>
+    </message>
+    <message>
+        <source>%1%</source>
+        <translation>%1%</translation>
+    </message>
     <message>
         <source>Settings</source>
         <translation>Settings</translation>
@@ -1902,6 +1967,30 @@ Verification code: %3</translation>
 </context>
 <context>
     <name>TerminalFilePanel</name>
+    <message>
+        <source>Shut down remote device</source>
+        <translation>Shut down remote device</translation>
+    </message>
+    <message>
+        <source>Restart remote device</source>
+        <translation>Restart remote device</translation>
+    </message>
+    <message>
+        <source>Restart the remote device? All connections will be interrupted and unsaved work may be lost.</source>
+        <translation>Restart the remote device? All connections will be interrupted and unsaved work may be lost.</translation>
+    </message>
+    <message>
+        <source>Shut down the remote device? All connections will be interrupted and unsaved work may be lost.</source>
+        <translation>Shut down the remote device? All connections will be interrupted and unsaved work may be lost.</translation>
+    </message>
+    <message>
+        <source>Remote operation failed</source>
+        <translation>Remote operation failed</translation>
+    </message>
+    <message>
+        <source>The remote device could not complete the operation: %1</source>
+        <translation>The remote device could not complete the operation: %1</translation>
+    </message>
     <message>
         <source>Select download directory</source>
         <translation>Select download directory</translation>
@@ -2411,6 +2500,10 @@ Verification code: %3</translation>
 <context>
     <name>WebRtcCtl</name>
     <message>
+        <source>The connection is unavailable or busy. Please try again.</source>
+        <translation>The connection is unavailable or busy. Please try again.</translation>
+    </message>
+    <message>
         <source>Control WebRTC connection created</source>
         <translation>Control WebRTC connection created</translation>
     </message>
@@ -2768,6 +2861,324 @@ Verification code: %3</translation>
     <message>
         <source>Trying to reconnect... (attempt %1)</source>
         <translation>Trying to reconnect... (attempt %1)</translation>
+    </message>
+</context>
+<context>
+    <name>DeviceManagerDialog</name>
+    <message>
+        <source>Save</source>
+        <translation>Save</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <source>Add device</source>
+        <translation>Add device</translation>
+    </message>
+    <message>
+        <source>All groups</source>
+        <translation>All groups</translation>
+    </message>
+    <message>
+        <source>Allow this system account to unlock my devices automatically.</source>
+        <translation>Allow this system account to unlock my devices automatically.</translation>
+    </message>
+    <message>
+        <source>Change management password</source>
+        <translation>Change management password</translation>
+    </message>
+    <message>
+        <source>Confirm password</source>
+        <translation>Confirm password</translation>
+    </message>
+    <message>
+        <source>Connection password</source>
+        <translation>Connection password</translation>
+    </message>
+    <message>
+        <source>Current management password</source>
+        <translation>Current management password</translation>
+    </message>
+    <message>
+        <source>Detected automatically for supported devices; can also be entered manually.</source>
+        <translation>Detected automatically for supported devices; can also be entered manually.</translation>
+    </message>
+    <message>
+        <source>Device ID</source>
+        <translation>Device ID</translation>
+    </message>
+    <message>
+        <source>Device ID and connection password are required.</source>
+        <translation>Device ID and connection password are required.</translation>
+    </message>
+    <message>
+        <source>Device details</source>
+        <translation>Device details</translation>
+    </message>
+    <message>
+        <source>Devices are encrypted locally. Double-click a device to fill the home page.</source>
+        <translation>Devices are encrypted locally. Double-click a device to fill the home page.</translation>
+    </message>
+    <message>
+        <source>Edit</source>
+        <translation>Edit</translation>
+    </message>
+    <message>
+        <source>Enter your management password to unlock your saved devices.</source>
+        <translation>Enter your management password to unlock your saved devices.</translation>
+    </message>
+    <message>
+        <source>Group</source>
+        <translation>Group</translation>
+    </message>
+    <message>
+        <source>Load to home</source>
+        <translation>Load to home</translation>
+    </message>
+    <message>
+        <source>Lock and close</source>
+        <translation>Lock and close</translation>
+    </message>
+    <message>
+        <source>Management password</source>
+        <translation>Management password</translation>
+    </message>
+    <message>
+        <source>My devices</source>
+        <translation>My devices</translation>
+    </message>
+    <message>
+        <source>New management password</source>
+        <translation>New management password</translation>
+    </message>
+    <message>
+        <source>No saved devices. Add a device to get started.</source>
+        <translation>No saved devices. Add a device to get started.</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation>Note</translation>
+    </message>
+    <message>
+        <source>Offline</source>
+        <translation>Offline</translation>
+    </message>
+    <message>
+        <source>Online</source>
+        <translation>Online</translation>
+    </message>
+    <message>
+        <source>Operating system</source>
+        <translation>Operating system</translation>
+    </message>
+    <message>
+        <source>Refresh status</source>
+        <translation>Refresh status</translation>
+    </message>
+    <message>
+        <source>Remember management password permanently</source>
+        <translation>Remember management password permanently</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Remove</translation>
+    </message>
+    <message>
+        <source>Remove device</source>
+        <translation>Remove device</translation>
+    </message>
+    <message>
+        <source>Remove device %1 from my devices?</source>
+        <translation>Remove device %1 from my devices?</translation>
+    </message>
+    <message>
+        <source>Search device ID or note</source>
+        <translation>Search device ID or note</translation>
+    </message>
+    <message>
+        <source>Set a separate management password to encrypt your saved devices. Use at least 8 characters. A forgotten password cannot be recovered.</source>
+        <translation>Set a separate management password to encrypt your saved devices. Use at least 8 characters. A forgotten password cannot be recovered.</translation>
+    </message>
+    <message>
+        <source>Set management password</source>
+        <translation>Set management password</translation>
+    </message>
+    <message>
+        <source>Status</source>
+        <translation>Status</translation>
+    </message>
+    <message>
+        <source>Status refreshes every 30 seconds. Unknown means the server is unavailable or the device does not support status queries.</source>
+        <translation>Status refreshes every 30 seconds. Unknown means the server is unavailable or the device does not support status queries.</translation>
+    </message>
+    <message>
+        <source>This device ID is already saved.</source>
+        <translation>This device ID is already saved.</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Unknown</translation>
+    </message>
+    <message>
+        <source>Unlock my devices</source>
+        <translation>Unlock my devices</translation>
+    </message>
+    <message>
+        <source>Use at least 8 characters and enter the same password twice.</source>
+        <translation>Use at least 8 characters and enter the same password twice.</translation>
+    </message>
+</context>
+<context>
+    <name>DeviceVault</name>
+    <message>
+        <source>A local device file already exists. Unlock it to continue.</source>
+        <translation>A local device file already exists. Unlock it to continue.</translation>
+    </message>
+    <message>
+        <source>Device data is invalid, too large, or contains duplicate device IDs.</source>
+        <translation>Device data is invalid, too large, or contains duplicate device IDs.</translation>
+    </message>
+    <message>
+        <source>Enter a non-empty device management password of at most 1024 characters.</source>
+        <translation>Enter a non-empty device management password of at most 1024 characters.</translation>
+    </message>
+    <message>
+        <source>Failed to restrict access to the remembered device key.</source>
+        <translation>Failed to restrict access to the remembered device key.</translation>
+    </message>
+    <message>
+        <source>Failed to save the remembered device key.</source>
+        <translation>Failed to save the remembered device key.</translation>
+    </message>
+    <message>
+        <source>No device password has been remembered on this computer.</source>
+        <translation>No device password has been remembered on this computer.</translation>
+    </message>
+    <message>
+        <source>Permanent password remembering requires secret-tool and an unlocked system keyring.</source>
+        <translation>Permanent password remembering requires secret-tool and an unlocked system keyring.</translation>
+    </message>
+    <message>
+        <source>The current device management password is incorrect.</source>
+        <translation>The current device management password is incorrect.</translation>
+    </message>
+    <message>
+        <source>The decrypted device data is invalid.</source>
+        <translation>The decrypted device data is invalid.</translation>
+    </message>
+    <message>
+        <source>The device data could not be encrypted.</source>
+        <translation>The device data could not be encrypted.</translation>
+    </message>
+    <message>
+        <source>The device encryption key could not be created.</source>
+        <translation>The device encryption key could not be created.</translation>
+    </message>
+    <message>
+        <source>The device encryption key is invalid.</source>
+        <translation>The device encryption key is invalid.</translation>
+    </message>
+    <message>
+        <source>The device key could not be saved in macOS Keychain.</source>
+        <translation>The device key could not be saved in macOS Keychain.</translation>
+    </message>
+    <message>
+        <source>The device list was changed by another window or process. Close and reopen My Devices before saving.</source>
+        <translation>The device list was changed by another window or process. Close and reopen My Devices before saving.</translation>
+    </message>
+    <message>
+        <source>The device management password is incorrect, or the local device file has been damaged.</source>
+        <translation>The device management password is incorrect, or the local device file has been damaged.</translation>
+    </message>
+    <message>
+        <source>The device management password is incorrect.</source>
+        <translation>The device management password is incorrect.</translation>
+    </message>
+    <message>
+        <source>The local device directory could not be created.</source>
+        <translation>The local device directory could not be created.</translation>
+    </message>
+    <message>
+        <source>The local device file could not be opened.</source>
+        <translation>The local device file could not be opened.</translation>
+    </message>
+    <message>
+        <source>The local device file could not be saved. Your previous data has been preserved.</source>
+        <translation>The local device file could not be saved. Your previous data has been preserved.</translation>
+    </message>
+    <message>
+        <source>The local device file has an invalid size.</source>
+        <translation>The local device file has an invalid size.</translation>
+    </message>
+    <message>
+        <source>The local device file is being used by another process. Please retry.</source>
+        <translation>The local device file is being used by another process. Please retry.</translation>
+    </message>
+    <message>
+        <source>The local device file is invalid or uses an unsupported format.</source>
+        <translation>The local device file is invalid or uses an unsupported format.</translation>
+    </message>
+    <message>
+        <source>The local device file would exceed the size limit.</source>
+        <translation>The local device file would exceed the size limit.</translation>
+    </message>
+    <message>
+        <source>The new device encryption key could not be created.</source>
+        <translation>The new device encryption key could not be created.</translation>
+    </message>
+    <message>
+        <source>The remembered device key cannot be unlocked by this Windows user.</source>
+        <translation>The remembered device key cannot be unlocked by this Windows user.</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be read from macOS Keychain.</source>
+        <translation>The remembered device key could not be read from macOS Keychain.</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be read.</source>
+        <translation>The remembered device key could not be read.</translation>
+    </message>
+    <message>
+        <source>The remembered device key could not be removed from macOS Keychain.</source>
+        <translation>The remembered device key could not be removed from macOS Keychain.</translation>
+    </message>
+    <message>
+        <source>The remembered device key file could not be removed.</source>
+        <translation>The remembered device key file could not be removed.</translation>
+    </message>
+    <message>
+        <source>The remembered device key is invalid. Enter the device management password again.</source>
+        <translation>The remembered device key is invalid. Enter the device management password again.</translation>
+    </message>
+    <message>
+        <source>The system credential store could not be started.</source>
+        <translation>The system credential store could not be started.</translation>
+    </message>
+    <message>
+        <source>The system credential store did not respond. Unlock the system keyring and retry.</source>
+        <translation>The system credential store did not respond. Unlock the system keyring and retry.</translation>
+    </message>
+    <message>
+        <source>The system credential store is unavailable or the remembered key is missing.</source>
+        <translation>The system credential store is unavailable or the remembered key is missing.</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices and enter a non-empty new management password.</source>
+        <translation>Unlock My Devices and enter a non-empty new management password.</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices before remembering the password.</source>
+        <translation>Unlock My Devices before remembering the password.</translation>
+    </message>
+    <message>
+        <source>Unlock My Devices before saving changes.</source>
+        <translation>Unlock My Devices before saving changes.</translation>
+    </message>
+    <message>
+        <source>Windows could not protect the remembered device key.</source>
+        <translation>Windows could not protect the remembered device key.</translation>
     </message>
 </context>
 </TS>

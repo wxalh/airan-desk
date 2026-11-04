@@ -42,11 +42,15 @@ QString TerminalFilePanel::currentRemotePath() const
 
 void TerminalFilePanel::setConnected(bool connected)
 {
+    if (m_connected != connected)
+        ++m_connectionGeneration;
     m_connected = connected;
     m_remotePathEdit->setEnabled(connected);
     m_parentButton->setEnabled(connected);
     m_refreshButton->setEnabled(connected);
     m_uploadFileButton->setEnabled(connected);
+    m_shutdownButton->setEnabled(connected);
+    m_restartButton->setEnabled(connected);
     m_uploadDirectoryButton->setEnabled(connected);
     m_downloadButton->setEnabled(connected);
     m_driveCombo->setEnabled(connected);

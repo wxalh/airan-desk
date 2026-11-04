@@ -44,6 +44,7 @@ public slots:
     void recvRenameFile(bool status, const QString &filePath, const QString &errorMessage);
     void recvDeleteFile(bool status, const QString &filePath, const QString &errorMessage);
     void recvCreateFile(bool status, const QString &filePath, bool isDirectory, const QString &errorMessage);
+    void recvRemoteOperation(bool status, const QString &action, const QString &errorMessage);
     void onTransferStarted(const QString &transferId, const QString &sourcePath, const QString &targetPath, const QString &operation);
     void onTransferProgress(const QString &transferId, qint64 transferredBytes, qint64 totalBytes, int transferredFiles, int totalFiles);
     void abortTransfers(const QString &reason);
@@ -108,6 +109,7 @@ private:
     void requestRemoteRename(const QString &path, const QString &newName);
     void requestRemoteCreate(const QString &path, bool isDirectory);
     void requestRemoteRunFile(const QString &path);
+    void confirmRemotePowerOperation(bool restart);
     void deleteSelectedRemoteFiles();
     void renameSelectedRemoteFile();
     void createRemoteItem(bool isDirectory);
@@ -146,8 +148,11 @@ private:
     QToolButton *m_uploadFileButton = nullptr;
     QToolButton *m_uploadDirectoryButton = nullptr;
     QToolButton *m_downloadButton = nullptr;
+    QToolButton *m_shutdownButton = nullptr;
+    QToolButton *m_restartButton = nullptr;
 
     bool m_connected = false;
+    quint64 m_connectionGeneration = 0;
     bool m_updatingDriveCombo = false;
     QPoint m_remoteDragStartPos;
     QString m_currentRemotePath;

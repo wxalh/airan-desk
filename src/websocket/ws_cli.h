@@ -9,8 +9,13 @@
 #include <QNetworkProxy>
 #include <QQueue>
 #include <QElapsedTimer>
+#include <QHash>
+#include <QSet>
+#include <QStringList>
 #include <QSslPreSharedKeyAuthenticator>
 #include "common/constant.h"
+
+class QJsonObject;
 
 class WsCli : public QObject
 {
@@ -31,6 +36,12 @@ private:
         quint64 generation{0};
     };
 
+    struct PresenceRequest
+    {
+        QString deviceId;
+        qint64 sentAt{0};
+    };
+
     quint64 m_heart_interval_ms = 30000;
     QTimer *m_heart_timer = nullptr;
     QTimer *m_reconnect_timer = nullptr;
@@ -43,6 +54,14 @@ private:
     QQueue<PendingMessage> m_pendingMessages;
     qint64 m_pendingMessageBytes = 0;
     quint64 m_messageGeneration{1};
+    QTimer *m_presence_timer = nullptr;
+    QTimer *m_presence_query_timer = nullptr;
+    QHash<QString, PresenceRequest> m_presenceRequests;
+    QSet<QString> m_presenceDevices;
+    QElapsedTimer m_presenceClock;
+    QElapsedTimer m_presenceReplyWindow;
+    QElapsedTimer m_presenceQueryWindow;
+    int m_presenceRepliesInWindow{0};
 
     int m_reconnect_phase = 0;
     int m_reconnect_count = 0;
@@ -57,6 +76,11 @@ private:
     bool flushPendingMessages();
     bool isWebRtcSessionMessage(const PendingMessage &message) const;
     void clearPendingMessages();
+    bool handlePresenceMessage(const QByteArray &message);
+    bool sendPresenceMessage(const QJsonObject &object);
+    void clearPresenceState();
+    void expirePresenceRequests();
+    QString presenceLocalId() const;
     static bool isSupportedSignalingUrl(const QUrl &url);
 
 signals:
@@ -74,12 +98,14 @@ signals:
     void onWsCliRecvTextMsg(const QString &message);
     void onWsCliRecvBinaryMsg(const QByteArray &message);
     void onReconnectStatusUpdate(const QString &status, int phase, int attempt, int nextDelaySeconds);
+    void devicePresenceChanged(const QString &id, const QString &state, const QString &os);
 
 public slots:
     void shutdown();
     void shutdownAndMoveToOwnerThread(QObject *owner);
     void init(const QString &url, quint64 heart_interval_ms);
     void resetUrlAndReconnect(const QString &url);
+    void queryDevicePresence(const QStringList &ids);
     void onWsConnected();
     void onWsDisconnected();
     void onWsBinaryMessageReceived(const QByteArray &message);

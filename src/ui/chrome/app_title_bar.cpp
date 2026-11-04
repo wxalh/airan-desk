@@ -110,6 +110,13 @@ void AppTitleBar::setResizeAspectRatio(const QSize &baseSize)
 }
 
 
+void AppTitleBar::setResizeAspectRatioEnabled(bool enabled)
+{
+    if (!enabled)
+        m_resizeAspectBase = QSize();
+}
+
+
 bool AppTitleBar::event(QEvent *event)
 {
     const bool handled = QWidget::event(event);
@@ -126,6 +133,7 @@ bool AppTitleBar::event(QEvent *event)
         enableAncestorMouseTracking();
         break;
     case QEvent::ApplicationFontChange:
+    case QEvent::StyleChange:
     case QEvent::ScreenChangeInternal:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
     case QEvent::DevicePixelRatioChange:

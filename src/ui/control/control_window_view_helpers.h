@@ -8,6 +8,7 @@
 #include <QStyleOption>
 #include <QStyleOptionToolButton>
 #include <QToolButton>
+#include "ui/common/adaptive_ui.h"
 
 inline int controlWindowTextWidth(const QFontMetrics &metrics, const QString &text)
 {
@@ -55,7 +56,7 @@ inline void fitControlToolButtonWidthToText(QToolButton *button)
     option.subControls = QStyle::SC_ToolButton;
 
     QSize contentSize(controlWindowTextWidth(metrics, button->text()), metrics.height());
-    const int arrowReserve = button->menu() ? 18 : 0;
+    const int arrowReserve = button->menu() ? UiAdaptive::scaled(18) : 0;
     const int width = button->style()->sizeFromContents(QStyle::CT_ToolButton, &option, contentSize, button).width() + arrowReserve;
     button->setFixedWidth(width);
 }

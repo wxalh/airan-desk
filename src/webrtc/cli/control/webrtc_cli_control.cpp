@@ -97,6 +97,8 @@ void WebRtcCli::handleKeyboardEvent(const QJsonObject &object)
 
 void WebRtcCli::handleRemoteOperation(const QJsonObject &object)
 {
+    if (m_shutdownRequested.load() || m_shutdownStarted.load())
+        return;
     const QString action = JsonUtil::getString(object, Constant::KEY_ACTION);
     QString errorMessage;
     const bool ok = InputUtil::execRemoteOperation(action, &errorMessage);
@@ -104,6 +106,13 @@ void WebRtcCli::handleRemoteOperation(const QJsonObject &object)
         LOG_INFO("Executed remote operation: {}", action);
     else
         LOG_WARN("Failed to execute remote operation {}: {}", action, errorMessage);
+    sendFileTextChannelMessage(JsonUtil::createObject()
+                                   .add(Constant::KEY_ROLE, Constant::ROLE_CLI)
+                                   .add(Constant::KEY_MSGTYPE, Constant::TYPE_REMOTE_OPERATION)
+                                   .add(Constant::KEY_ACTION, action)
+                                   .add(Constant::KEY_STATUS, ok)
+                                   .add(Constant::KEY_ERROR, errorMessage)
+                                   .build());
 }
 
 

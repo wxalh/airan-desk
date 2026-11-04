@@ -79,6 +79,32 @@ void WebRtcCtl::fileTextChannelSendMsg(const rtc::message_variant &data)
         QJsonObject object = JsonUtil::safeParseObject(
             QByteArray::fromStdString(std::get<std::string>(outboundData)));
         const QString msgType = JsonUtil::getString(object, Constant::KEY_MSGTYPE);
+        if (msgType == Constant::TYPE_REMOTE_OPERATION)
+        {
+            // Never replay a power request after reconnecting or queue backpressure.
+            const QString action = JsonUtil::getString(object, Constant::KEY_ACTION);
+            bool sent = false;
+            if (m_connected && m_fileTextChannel && m_fileTextChannel->isOpen())
+            {
+                try
+                {
+                    sent = m_fileTextChannel->send(outboundData);
+                }
+                catch (const std::exception &e)
+                {
+                    LOG_WARN("Failed to send remote power operation: {}", e.what());
+                }
+                catch (...)
+                {
+                    LOG_WARN("Failed to send remote power operation");
+                }
+            }
+            if (sent)
+                noteSessionOutboundActivity();
+            else
+                emit recvRemoteOperationRes(false, action, tr("The connection is unavailable or busy. Please try again."));
+            return;
+        }
         if (msgType == Constant::TYPE_TERMINAL_START)
             beginTerminalStartGeneration(JsonUtil::getString(object, Constant::KEY_REQUEST_ID));
         else if (msgType == Constant::TYPE_FILE_LIST)

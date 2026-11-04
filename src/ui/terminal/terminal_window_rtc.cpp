@@ -42,6 +42,7 @@ void TerminalWindow::initCLI()
     connect(&m_rtcCtl, &WebRtcCtl::recvRenameFileRes, m_filePanel, &TerminalFilePanel::recvRenameFile);
     connect(&m_rtcCtl, &WebRtcCtl::recvDeleteFileRes, m_filePanel, &TerminalFilePanel::recvDeleteFile);
     connect(&m_rtcCtl, &WebRtcCtl::recvCreateFileRes, m_filePanel, &TerminalFilePanel::recvCreateFile);
+    connect(&m_rtcCtl, &WebRtcCtl::recvRemoteOperationRes, m_filePanel, &TerminalFilePanel::recvRemoteOperation);
     connect(&m_rtcCtl, &WebRtcCtl::fileTransferStarted, m_filePanel, &TerminalFilePanel::onTransferStarted);
     connect(&m_rtcCtl, &WebRtcCtl::fileTransferProgress, m_filePanel, &TerminalFilePanel::onTransferProgress);
     connect(&m_rtcCtl, &WebRtcCtl::remoteDisconnectRequested,

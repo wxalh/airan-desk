@@ -1,4 +1,5 @@
 #include "terminal/file_panel/terminal_file_panel.h"
+#include "ui/common/adaptive_ui.h"
 
 #include <QComboBox>
 #include <QEvent>
@@ -11,6 +12,7 @@
 #include <QScreen>
 #include <QSize>
 #include <QTableWidget>
+#include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -25,7 +27,7 @@ int TerminalFilePanel::scaled(int value) const
     if (!screen)
         screen = QGuiApplication::primaryScreen();
     const double scale = screen ? qBound(0.75, screen->logicalDotsPerInch() / 96.0, 3.0) : 1.0;
-    return qMax(1, static_cast<int>(qRound(value * scale)));
+    return qMax(1, static_cast<int>(qRound(value * scale * UiAdaptive::scaleFactor())));
 }
 
 
@@ -37,6 +39,11 @@ bool TerminalFilePanel::event(QEvent *event)
 
     switch (event->type())
     {
+    case QEvent::StyleChange:
+        // The application stylesheet repolishes child widgets after their
+        // parent's StyleChange. Restore the scaled action metrics afterwards.
+        QTimer::singleShot(0, this, [this]() { refreshDpiMetrics(); });
+        break;
     case QEvent::ApplicationFontChange:
     case QEvent::ScreenChangeInternal:
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -53,7 +60,7 @@ bool TerminalFilePanel::event(QEvent *event)
 
 void TerminalFilePanel::setupUi()
 {
-    setMinimumWidth(scaled(200));
+    setMinimumWidth(scaled(170));
     setObjectName(QStringLiteral("terminalFilePanel"));
     applyPanelStyle();
 
@@ -74,7 +81,7 @@ void TerminalFilePanel::setupUi()
 
 void TerminalFilePanel::refreshDpiMetrics()
 {
-    setMinimumWidth(scaled(200));
+    setMinimumWidth(scaled(170));
     if (layout())
     {
         layout()->setContentsMargins(scaled(3), scaled(3), scaled(3), scaled(3));
@@ -86,21 +93,35 @@ void TerminalFilePanel::refreshDpiMetrics()
         m_refreshButton,
         m_downloadButton,
         m_uploadFileButton,
+        m_shutdownButton,
+        m_restartButton,
         m_uploadDirectoryButton,
     };
     for (QToolButton *button : toolButtons)
     {
         if (!button)
             continue;
-        button->setFixedSize(scaled(24), scaled(22));
+        button->setMinimumSize(scaled(28), scaled(28));
+        button->setMaximumSize(scaled(36), scaled(36));
         button->setIconSize(QSize(scaled(14), scaled(14)));
     }
+    if (QLayout *actions = findChild<QLayout *>(QStringLiteral("terminalFileActionsLayout")))
+        actions->setSpacing(scaled(3));
     if (m_driveCombo)
-        m_driveCombo->setFixedSize(scaled(58), scaled(22));
+    {
+        m_driveCombo->setMinimumSize(scaled(58), scaled(28));
+        m_driveCombo->setMaximumHeight(scaled(36));
+    }
     if (m_followPathCheck)
-        m_followPathCheck->setFixedHeight(scaled(22));
+    {
+        m_followPathCheck->setMinimumHeight(scaled(28));
+        m_followPathCheck->setMaximumHeight(scaled(36));
+    }
     if (m_remotePathEdit)
-        m_remotePathEdit->setFixedHeight(scaled(24));
+    {
+        m_remotePathEdit->setMinimumHeight(scaled(32));
+        m_remotePathEdit->setMaximumHeight(scaled(40));
+    }
     if (m_remoteTable)
     {
         m_remoteTable->setColumnWidth(1, scaled(72));

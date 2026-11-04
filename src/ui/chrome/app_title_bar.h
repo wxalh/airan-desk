@@ -23,6 +23,7 @@ public:
     void setTitle(const QString &title);
     void setUiScale(double scale);
     void setResizeAspectRatio(const QSize &baseSize);
+    void setResizeAspectRatioEnabled(bool enabled);
 
 signals:
     void uiScaleChanged();

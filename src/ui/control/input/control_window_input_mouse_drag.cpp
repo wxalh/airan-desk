@@ -9,7 +9,7 @@
 
 void ControlWindow::mousePressEvent(QMouseEvent *event)
 {
-    if (m_floatingToolbar)
+    if (isReceivedImg && !isClosing() && m_floatingToolbar && m_floatingToolbar->isVisible())
     {
         const QRect toolbarGlobalRect(m_floatingToolbar->mapToGlobal(QPoint(0, 0)), m_floatingToolbar->size());
         if (toolbarGlobalRect.contains(event->globalPos()))
@@ -50,7 +50,8 @@ void ControlWindow::mousePressEvent(QMouseEvent *event)
 
 void ControlWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_draggingToolbar && m_floatingToolbar)
+    if (isReceivedImg && !isClosing() && m_draggingToolbar &&
+        m_floatingToolbar && m_floatingToolbar->isVisible())
     {
         QWidget *toolbarParent = m_floatingToolbar->parentWidget();
         if (!toolbarParent)

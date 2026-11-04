@@ -32,10 +32,10 @@ void applyPasswordRevealState(QLineEdit *lineEdit, QToolButton *eyeButton, bool 
 
     lineEdit->setEchoMode(show ? QLineEdit::Normal : QLineEdit::Password);
     setPasswordStyleActive(lineEdit, !show);
-    lineEdit->setFont(passwordFontProperty(lineEdit,
-                                           show ? kPasswordVisibleFontProperty : kPasswordHiddenFontProperty,
-                                           lineEdit->font()));
-    eyeButton->setIcon(makeEyeIcon(show));
+    const char *fontProperty = show ? kPasswordVisibleFontProperty : kPasswordHiddenFontProperty;
+    if (lineEdit->property(fontProperty).canConvert<QFont>())
+        lineEdit->setFont(passwordFontProperty(lineEdit, fontProperty, lineEdit->font()));
+    eyeButton->setIcon(makeEyeIcon(show, lineEdit->palette().color(QPalette::Text)));
     eyeButton->setToolTip(show ? QLineEdit::tr("Hide password")
                                : QLineEdit::tr("Show password"));
 }

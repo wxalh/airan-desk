@@ -14,7 +14,8 @@ void TerminalFilePanel::createPathEdit(QVBoxLayout *layout)
 {
     m_remotePathEdit = new QLineEdit(this);
     m_remotePathEdit->setPlaceholderText(tr("Remote path"));
-    m_remotePathEdit->setFixedHeight(scaled(24));
+    m_remotePathEdit->setMinimumHeight(scaled(32));
+    m_remotePathEdit->setMaximumHeight(scaled(40));
     layout->addWidget(m_remotePathEdit);
 }
 
@@ -22,6 +23,7 @@ void TerminalFilePanel::createPathEdit(QVBoxLayout *layout)
 void TerminalFilePanel::createRemoteTable(QVBoxLayout *layout)
 {
     m_remoteTable = new QTableWidget(this);
+    m_remoteTable->setObjectName(QStringLiteral("terminalRemoteTable"));
     m_remoteTable->setColumnCount(3);
     m_remoteTable->setHorizontalHeaderLabels({tr("Name"), tr("Size"), tr("Modified")});
     m_remoteTable->setSelectionBehavior(QAbstractItemView::SelectRows);

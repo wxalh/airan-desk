@@ -65,6 +65,20 @@ bool ControlWindow::isValidNormPoint(const QPointF &pos) const
 
 bool ControlWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == this && event &&
+        (event->type() == QEvent::ApplicationFontChange || event->type() == QEvent::StyleChange) &&
+        !m_toolbarLayoutRefreshPending)
+    {
+        m_toolbarLayoutRefreshPending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_toolbarLayoutRefreshPending = false;
+            if (!isClosing())
+            {
+                updateToolbarPosition();
+                constrainAndroidNavigationPanel();
+            }
+        });
+    }
     if (event && (event->type() == QEvent::WindowDeactivate ||
                   event->type() == QEvent::ApplicationDeactivate))
     {
@@ -127,7 +141,8 @@ bool ControlWindow::handleToolbarDragEvent(QObject *watched, QEvent *event)
     const bool toolbarDragTarget = watched == m_floatingToolbar ||
                                    watched == m_statsLabel ||
                                    watched == m_toolbarButtonRow;
-    if (!toolbarDragTarget || !m_floatingToolbar)
+    if (!isReceivedImg || isClosing() || !toolbarDragTarget ||
+        !m_floatingToolbar || !m_floatingToolbar->isVisible())
         return false;
 
     if (event->type() == QEvent::MouseButtonPress)
@@ -181,7 +196,8 @@ bool ControlWindow::handleAndroidNavigationDragEvent(QObject *watched, QEvent *e
                                (m_androidNavPanel && qobject_cast<QWidget *>(watched) &&
                                 qobject_cast<QWidget *>(watched)->parentWidget() == m_androidNavPanel);
 
-    if (!navDragTarget || !m_androidNavPanel || !m_androidNavHost)
+    if (!isReceivedImg || isClosing() || !navDragTarget ||
+        !m_androidNavPanel || !m_androidNavHost || !m_androidNavPanel->isVisible())
         return false;
 
     if (event->type() == QEvent::MouseButtonPress)

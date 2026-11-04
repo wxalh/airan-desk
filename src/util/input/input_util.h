@@ -22,6 +22,7 @@ public:
     static void execKeyboardEvent(int keyCode,const QString& dwFlags);
     static void execKeyboardText(const QString &text);
     static bool execRemoteOperation(const QString &action, QString *errorMessage = nullptr);
+    static bool execPowerOperation(bool restart, QString *errorMessage = nullptr);
     static bool execAndroidNavigation(const QString &action, QString *errorMessage = nullptr);
     static bool runProgram(const QString &path, QString *errorMessage = nullptr);
     static bool prepareWindowsInputBroker(QString *errorMessage = nullptr);

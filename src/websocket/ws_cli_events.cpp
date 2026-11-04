@@ -7,6 +7,7 @@ void WsCli::onWsAboutToClose()
 {
     LOG_DEBUG("WebSocket about to close");
     m_connected = false;
+    clearPresenceState();
 }
 
 
@@ -20,6 +21,8 @@ void WsCli::onWsBinaryMessageReceived(const QByteArray &message)
             m_ws->abort();
         return;
     }
+    if (handlePresenceMessage(message))
+        return;
     LOG_TRACE("size:{}", message.size());
     emit onWsCliRecvBinaryMsg(message);
 }
@@ -35,7 +38,8 @@ void WsCli::onWsTextMessageReceived(const QString &message)
             m_ws->abort();
         return;
     }
-    const qint64 utf8Bytes = message.toUtf8().size();
+    const QByteArray utf8Message = message.toUtf8();
+    const qint64 utf8Bytes = utf8Message.size();
     if (utf8Bytes > kMaxInboundMessageBytes)
     {
         LOG_ERROR("Rejected oversized inbound text signaling message: bytes={}", utf8Bytes);
@@ -44,6 +48,8 @@ void WsCli::onWsTextMessageReceived(const QString &message)
             m_ws->abort();
         return;
     }
+    if (handlePresenceMessage(utf8Message))
+        return;
     LOG_TRACE("text size:{}", utf8Bytes);
     emit onWsCliRecvTextMsg(message);
 }
@@ -72,6 +78,7 @@ void WsCli::onWsDisconnected()
 {
     LOG_WARN("WebSocket disconnected, starting intelligent reconnect");
     m_connected = false;
+    clearPresenceState();
     ++m_messageGeneration;
     m_socketConnectTimer.invalidate();
     emit stopHeartTimer();

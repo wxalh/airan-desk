@@ -1,5 +1,6 @@
 ﻿#include "password_line_edit_util.h"
 #include "password_line_edit_util_internal.h"
+#include "ui/common/adaptive_ui.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -32,6 +33,8 @@ protected:
         if (watched == m_lineEdit &&
             (event->type() == QEvent::Resize ||
              event->type() == QEvent::Show ||
+             event->type() == QEvent::FontChange ||
+             event->type() == QEvent::ApplicationFontChange ||
              event->type() == QEvent::StyleChange ||
              event->type() == QEvent::ScreenChangeInternal
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -63,7 +66,7 @@ int scaledForWidget(QWidget *widget, int value)
     if (!screen)
         screen = QGuiApplication::primaryScreen();
     const double scale = screen ? qBound(0.75, screen->logicalDotsPerInch() / 96.0, 3.0) : 1.0;
-    return qMax(1, static_cast<int>(qRound(value * scale)));
+    return qMax(1, static_cast<int>(qRound(value * scale * UiAdaptive::scaleFactor())));
 }
 } // namespace
 
@@ -77,7 +80,6 @@ void polishPasswordEmbeddedButtons(QLineEdit *lineEdit, QToolButton *eyeButton, 
     const int edgeInset = scaledForWidget(lineEdit, 6);
     const int overlapAdjust = scaledForWidget(lineEdit, 2);
     const int buttonGap = scaledForWidget(lineEdit, 4);
-    const int hoverRadius = buttonSize / 2;
 
     for (QToolButton *button : {eyeButton, clearButton})
     {
@@ -87,19 +89,9 @@ void polishPasswordEmbeddedButtons(QLineEdit *lineEdit, QToolButton *eyeButton, 
         button->setCursor(Qt::ArrowCursor);
         button->setIconSize(QSize(iconSize, iconSize));
         button->setFixedSize(buttonSize, buttonSize);
-        button->setStyleSheet(QStringLiteral(
-            "QToolButton {"
-            "    background: transparent;"
-            "    border: none;"
-            "    padding: 0;"
-            "    margin: 0;"
-            "}"
-            "QToolButton:hover {"
-            "    background: rgba(131, 193, 224, 0.14);"
-            "    border-radius: %1px;"
-            "}")
-                                  .arg(hoverRadius));
     }
+    eyeButton->setIcon(makeEyeIcon(lineEdit->echoMode() == QLineEdit::Normal,
+                                  lineEdit->palette().color(QPalette::Text)));
 
     const int top = qMax(0, (lineEdit->height() - buttonSize) / 2);
     if (clearButton)
@@ -138,14 +130,12 @@ void installPasswordRevealButton(QLineEdit *lineEdit, bool showClearButton)
 
     lineEdit->setClearButtonEnabled(false);
     lineEdit->setEchoMode(QLineEdit::Password);
-    if (!lineEdit->property(PasswordLineEditInternal::kPasswordHiddenFontProperty).isValid())
-        lineEdit->setProperty(PasswordLineEditInternal::kPasswordHiddenFontProperty, lineEdit->font());
-    if (!lineEdit->property(PasswordLineEditInternal::kPasswordVisibleFontProperty).isValid())
-        lineEdit->setProperty(PasswordLineEditInternal::kPasswordVisibleFontProperty, lineEdit->font());
     PasswordLineEditInternal::setPasswordStyleActive(lineEdit, true);
 
     auto *eyeButton = new QToolButton(lineEdit);
-    eyeButton->setIcon(PasswordLineEditInternal::makeEyeIcon(false));
+    eyeButton->setObjectName(QStringLiteral("passwordRevealButton"));
+    eyeButton->setProperty("passwordEmbeddedButton", true);
+    eyeButton->setIcon(PasswordLineEditInternal::makeEyeIcon(false, lineEdit->palette().color(QPalette::Text)));
     eyeButton->setToolTip(QLineEdit::tr("Show password"));
     eyeButton->setFocusPolicy(Qt::NoFocus);
     eyeButton->setCursor(Qt::ArrowCursor);
@@ -155,6 +145,8 @@ void installPasswordRevealButton(QLineEdit *lineEdit, bool showClearButton)
     if (showClearButton)
     {
         clearButton = new QToolButton(lineEdit);
+        clearButton->setObjectName(QStringLiteral("passwordClearButton"));
+        clearButton->setProperty("passwordEmbeddedButton", true);
         clearButton->setIcon(lineEdit->style()->standardIcon(QStyle::SP_LineEditClearButton));
         clearButton->setToolTip(QLineEdit::tr("Clear"));
         clearButton->setFocusPolicy(Qt::NoFocus);

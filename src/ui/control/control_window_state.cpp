@@ -75,15 +75,8 @@ void ControlWindow::refreshStatsLabel()
                               .arg(network)
                               .arg(display)
                               .arg(transferPart));
-    if (!m_toolbarInSidePanel)
-    {
-        QFontMetrics statsFm(m_statsLabel->font());
-        const QStringList lines = m_statsLabel->text().split(QLatin1Char('\n'));
-        int lineWidth = 0;
-        for (const QString &line : lines)
-            lineWidth = qMax(lineWidth, controlWindowTextWidth(statsFm, line));
-        m_statsLabel->setMinimumWidth(qMax(220, lineWidth + 24));
-    }
+    m_statsLabel->setToolTip(m_statsLabel->text());
+    updateToolbarPosition();
 }
 
 void ControlWindow::clearTransferStatus()

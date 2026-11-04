@@ -23,6 +23,8 @@ void FileTransferWindow::setupFileTables()
     ui->localTable->viewport()->setAcceptDrops(true);
     ui->localTable->setDragEnabled(true);
     ui->localTable->setDragDropMode(QAbstractItemView::DragDrop);
+    ui->localTable->setAlternatingRowColors(true);
+    ui->localTable->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     {
         QVector<int> stretchCols;
         stretchCols.append(0);
@@ -32,7 +34,6 @@ void FileTransferWindow::setupFileTables()
         fixedCols.append(qMakePair(3, 90));
         UiAdaptive::makeTableAdaptive(ui->localTable, stretchCols, fixedCols, true);
     }
-    ui->localTable->setStyleSheet(QStringLiteral("QTableCornerButton::section { background-color: #202020; border: 1px solid #3a3a3a; }"));
     connect(ui->localTable, &QTableWidget::customContextMenuRequested,
             this, &FileTransferWindow::onLocalTableContextMenuRequested);
 
@@ -44,6 +45,8 @@ void FileTransferWindow::setupFileTables()
     ui->remoteTable->viewport()->setAcceptDrops(true);
     ui->remoteTable->setDragEnabled(true);
     ui->remoteTable->setDragDropMode(QAbstractItemView::DragDrop);
+    ui->remoteTable->setAlternatingRowColors(true);
+    ui->remoteTable->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     {
         QVector<int> stretchCols;
         stretchCols.append(0);
@@ -53,7 +56,6 @@ void FileTransferWindow::setupFileTables()
         fixedCols.append(qMakePair(3, 90));
         UiAdaptive::makeTableAdaptive(ui->remoteTable, stretchCols, fixedCols, true);
     }
-    ui->remoteTable->setStyleSheet(QStringLiteral("QTableCornerButton::section { background-color: #202020; border: 1px solid #3a3a3a; }"));
     connect(ui->remoteTable, &QTableWidget::customContextMenuRequested,
             this, &FileTransferWindow::onRemoteTableContextMenuRequested);
 
@@ -65,7 +67,8 @@ void FileTransferWindow::setupFileTables()
 void FileTransferWindow::setupLogTable()
 {
     ui->transferLogTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    ui->transferLogTable->setAlternatingRowColors(false);
+    ui->transferLogTable->setAlternatingRowColors(true);
+    ui->transferLogTable->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     ui->transferLogTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     {
         QVector<int> stretchCols;
@@ -79,40 +82,6 @@ void FileTransferWindow::setupLogTable()
     }
     ui->transferLogTable->verticalHeader()->setVisible(false);
     ui->transferLogTable->verticalHeader()->setDefaultSectionSize(30);
-    ui->transferLogTable->setStyleSheet(QStringLiteral(
-        "QTableWidget#transferLogTable {"
-        "    background-color: #181818;"
-        "    alternate-background-color: #181818;"
-        "    color: rgb(131, 193, 224);"
-        "    gridline-color: #3a3a3a;"
-        "    border: 1px solid #3a3a3a;"
-        "    selection-background-color: #783041;"
-        "}"
-        "QTableWidget#transferLogTable::item {"
-        "    background-color: #181818;"
-        "    color: rgb(131, 193, 224);"
-        "    padding: 4px;"
-        "}"
-        "QTableWidget#transferLogTable::item:selected {"
-        "    background-color: #783041;"
-        "    color: #ffffff;"
-        "}"
-        "QTableWidget#transferLogTable QHeaderView::section {"
-        "    background-color: #202020;"
-        "    color: rgb(131, 193, 224);"
-        "    border: 1px solid #3a3a3a;"
-        "    padding: 5px;"
-        "}"
-        "QTableWidget#transferLogTable QTableCornerButton::section {"
-        "    background-color: #202020;"
-        "    border: 1px solid #3a3a3a;"
-        "}"
-        "QTableWidget#transferLogTable QLabel#transferProgressLabel {"
-        "    background: transparent;"
-        "    color: rgb(131, 193, 224);"
-        "    padding: 0 6px;"
-        "}"));
-
     ui->transferLogTable->setColumnCount(5);
     ui->transferLogTable->setHorizontalHeaderLabels({tr("Source path"), tr("Target path"), tr("Progress"), tr("Status"), tr("Action")});
 }

@@ -1,5 +1,6 @@
 ﻿#include "settings_window.h"
 
+#include "app/app_style.h"
 #include "ui/widgets/password/password_line_edit_util.h"
 #include "ui_settings_window.h"
 
@@ -87,8 +88,8 @@ void polishSettingsField(QWidget *field)
     if (!field)
         return;
 
-    field->setMinimumHeight(34);
-    field->setMinimumWidth(260);
+    field->setMinimumHeight(qMax(28, qRound(34 * appScale())));
+    field->setMinimumWidth(0);
     field->setSizePolicy(QSizePolicy::Expanding, field->sizePolicy().verticalPolicy());
 }
 
@@ -176,14 +177,15 @@ void SettingsWindow::polishSettingControls()
     ui->settingsTabs->tabBar()->installEventFilter(new SettingsTabHitFilter(ui->settingsTabs->tabBar()));
     polishDialogButtons(ui->buttonBox);
 
-    const QList<QWidget *> fields{m_logLevelCombo, m_languageCombo, m_notificationScriptEdit, m_wsUrlEdit, m_iceHostEdit,
+    const QList<QWidget *> fields{m_logLevelCombo, m_languageCombo, m_themeCombo, m_scaleSlider,
+                                  m_notificationScriptEdit, m_wsUrlEdit, m_iceHostEdit,
                                   m_icePortSpin, m_iceUserEdit, m_icePasswordEdit,
                                   m_audioMicDeviceCombo, m_audioLoopbackDeviceCombo, m_fpsSpin,
                                   m_networkCombo};
     for (QWidget *field : fields)
         polishSettingsField(field);
 
-    for (QComboBox *combo : {m_logLevelCombo, m_languageCombo, m_audioMicDeviceCombo,
+    for (QComboBox *combo : {m_logLevelCombo, m_languageCombo, m_themeCombo, m_audioMicDeviceCombo,
                              m_audioLoopbackDeviceCombo, m_networkCombo})
         polishSettingsCombo(combo);
 

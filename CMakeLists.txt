@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(airan-desk VERSION 1.1.5 LANGUAGES C CXX)
+project(airan-desk VERSION 1.2.0 LANGUAGES C CXX)
 
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING
@@ -449,6 +449,11 @@ else()
 endif()
 
 set(AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS)
+set(AIRAN_WEBRTC_BORINGSSL_INCLUDE_DIR
+    "${WEBRTC_ROOT_DIR}/include/m${LIBWEBRTC_MILESTONE}/third_party/boringssl/src/include")
+if(NOT EXISTS "${AIRAN_WEBRTC_BORINGSSL_INCLUDE_DIR}")
+    set(AIRAN_WEBRTC_BORINGSSL_INCLUDE_DIR "")
+endif()
 if(LIBWEBRTC_PERFETTO_ROOT_DIR AND EXISTS "${LIBWEBRTC_PERFETTO_ROOT_DIR}")
     list(APPEND AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS
         "${LIBWEBRTC_PERFETTO_ROOT_DIR}")
@@ -461,9 +466,19 @@ endif()
 
 # Include directories
 set_property(TARGET ${PROJECT_NAME} PROPERTY INCLUDE_DIRECTORIES "")
+# Preserve usage requirements from the imported WebRTC target while keeping
+# its headers out of CMake's system-include bucket. This lets the bundled
+# BoringSSL headers take precedence over a host OpenSSL installation.
+set_property(TARGET ${PROJECT_NAME}
+    PROPERTY NO_SYSTEM_FROM_IMPORTED TRUE)
+# The bundled WebRTC package exposes BoringSSL headers under its include tree.
+# Keep that directory ahead of any system/OpenSSL include path: application
+# code uses BoringSSL-only APIs (for example EVP_AEAD), and mixing a Homebrew
+# OpenSSL header with a BoringSSL header produces incompatible typedefs.
 target_include_directories(${PROJECT_NAME}
-    PRIVATE
+    BEFORE PRIVATE
     src
+    ${AIRAN_WEBRTC_BORINGSSL_INCLUDE_DIR}
     ${LIBWEBRTC_INCLUDE_DIR}
     ${AIRAN_WEBRTC_EXTRA_INCLUDE_DIRS}
 )
@@ -486,6 +501,7 @@ target_link_libraries(${PROJECT_NAME}
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE
     AIRAN_DESK_VERSION="${PROJECT_VERSION}"
+    AIRAN_DESK_VERSION_RC=${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},0
     ${EXTRA_DEFINITIONS}
 )
 

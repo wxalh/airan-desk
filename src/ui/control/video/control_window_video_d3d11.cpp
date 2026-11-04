@@ -37,10 +37,6 @@ void ControlWindow::updateD3D11Frame(const rtc::D3D11VideoFrame &frame)
         return;
     }
 
-    if (!isReceivedImg)
-        markConnectionWaitingFrameDone();
-    isReceivedImg = true;
-
     const QSize frameSize(frame.width, frame.height);
     if (m_remoteResolution != frameSize)
     {
@@ -64,6 +60,8 @@ void ControlWindow::updateD3D11Frame(const rtc::D3D11VideoFrame &frame)
         refreshStatsLabel();
     }
 
+    if (!isReceivedImg)
+        markConnectionWaitingFrameDone();
     if (!windowSizeAdjusted)
         adjustWindowSizeToVideo(frameSize);
     m_windowSize = frameSize;

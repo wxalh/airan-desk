@@ -2,6 +2,7 @@
 #define SETTINGS_WINDOW_H
 
 #include "ui/settings/audio/settings_audio_backend.h"
+#include "app/app_style.h"
 
 #include <QDialog>
 #include <QMutex>
@@ -21,6 +22,8 @@ class QPushButton;
 class QUrl;
 class QNetworkAccessManager;
 class QTextBrowser;
+class QSlider;
+class QResizeEvent;
 
 namespace Ui
 {
@@ -39,8 +42,13 @@ signals:
     void signalingServerChanged();
 
 protected:
+    bool event(QEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+
+public slots:
+    void reject() override;
 
 private slots:
     void saveSettings();
@@ -85,6 +93,8 @@ private:
     void startServiceOperation();
     QString selectedAudioDeviceValue(QComboBox *combo) const;
     void stopMicTest();
+    void updateResponsiveLayout();
+    void restoreAppearancePreview();
 
     QCheckBox *m_allowRemoteCheck{nullptr};
     QCheckBox *m_autoStartCheck{nullptr};
@@ -94,6 +104,9 @@ private:
     QPushButton *m_notificationScriptBrowseButton{nullptr};
     QPushButton *m_notificationScriptTestButton{nullptr};
     QPushButton *m_thirdPartyLicensesButton{nullptr};
+    QComboBox *m_themeCombo{nullptr};
+    QSlider *m_scaleSlider{nullptr};
+    QLabel *m_scaleValue{nullptr};
     QLineEdit *m_wsUrlEdit{nullptr};
     QLineEdit *m_iceHostEdit{nullptr};
     QSpinBox *m_icePortSpin{nullptr};
@@ -143,6 +156,9 @@ private:
     bool m_closeAfterMicTest{false};
     std::thread m_serviceOperationThread;
     bool m_centeredOnFirstShow{false};
+    AppTheme m_openingTheme{AppTheme::Light};
+    qreal m_openingScale{1.0};
+    bool m_appearanceSnapshotValid{false};
     Ui::SettingsWindow *ui{nullptr};
 };
 

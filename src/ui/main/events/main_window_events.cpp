@@ -1,5 +1,6 @@
 #include "ui/main/main_window.h"
 #include "ui/settings/window/settings_window.h"
+#include "ui/common/adaptive_ui.h"
 #include "common/constant.h"
 #include "util/config/config_util.h"
 #include "util/input/input_util.h"
@@ -255,6 +256,13 @@ bool MainWindow::event(QEvent *event)
 
     switch (event->type())
     {
+    case QEvent::Show:
+        if (!m_centeredOnFirstShow)
+        {
+            m_centeredOnFirstShow = true;
+            QTimer::singleShot(0, this, [this]() { UiAdaptive::centerWindowOnScreen(this); });
+        }
+        break;
     case QEvent::ApplicationFontChange:
     case QEvent::StyleChange:
     case QEvent::ScreenChangeInternal:
@@ -272,19 +280,8 @@ bool MainWindow::event(QEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
-    constexpr double kMainAspect = 800.0 / 638.0;
-    if (event && !event->size().isEmpty())
-    {
-        const int expectedHeight = qMax(minimumHeight(), static_cast<int>(qRound(width() / kMainAspect)));
-        if (qAbs(expectedHeight - height()) > 1)
-        {
-            QSignalBlocker blocker(this);
-            resize(width(), expectedHeight);
-            return;
-        }
-    }
     if (m_content)
-        layoutMainContent();
+        scheduleMainLayoutRefresh();
 }
 
 void MainWindow::scheduleMainLayoutRefresh()

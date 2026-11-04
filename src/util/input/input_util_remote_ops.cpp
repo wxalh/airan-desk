@@ -15,6 +15,9 @@ bool InputUtil::execRemoteOperation(const QString &action, QString *errorMessage
 {
     const QString normalized = action.trimmed().toLower();
 
+    if (normalized == QStringLiteral("restart") || normalized == QStringLiteral("shutdown"))
+        return execPowerOperation(normalized == QStringLiteral("restart"), errorMessage);
+
 #if defined(Q_OS_WIN64) || defined(Q_OS_WIN32)
     if (normalized == QStringLiteral("sas"))
         return InputUtil::sendSecureAttentionSequence(errorMessage);
@@ -22,10 +25,6 @@ bool InputUtil::execRemoteOperation(const QString &action, QString *errorMessage
         return LockWorkStation() != FALSE;
     if (normalized == QStringLiteral("logoff"))
         return ExitWindowsEx(EWX_LOGOFF, SHTDN_REASON_MAJOR_APPLICATION) != FALSE;
-    if (normalized == QStringLiteral("restart"))
-        return QProcess::startDetached(QStringLiteral("shutdown"), QStringList() << QStringLiteral("/r") << QStringLiteral("/t") << QStringLiteral("0"));
-    if (normalized == QStringLiteral("shutdown"))
-        return QProcess::startDetached(QStringLiteral("shutdown"), QStringList() << QStringLiteral("/s") << QStringLiteral("/t") << QStringLiteral("0"));
     if (normalized == QStringLiteral("num_lock"))
     {
         InputUtil::execKeyboardEvent(VK_NUMLOCK, QStringLiteral("down"));
@@ -48,10 +47,6 @@ bool InputUtil::execRemoteOperation(const QString &action, QString *errorMessage
     }
     if (normalized == QStringLiteral("logoff"))
         return QProcess::startDetached(QStringLiteral("osascript"), QStringList() << QStringLiteral("-e") << QStringLiteral("tell app \"System Events\" to log out"));
-    if (normalized == QStringLiteral("restart"))
-        return QProcess::startDetached(QStringLiteral("osascript"), QStringList() << QStringLiteral("-e") << QStringLiteral("tell app \"System Events\" to restart"));
-    if (normalized == QStringLiteral("shutdown"))
-        return QProcess::startDetached(QStringLiteral("osascript"), QStringList() << QStringLiteral("-e") << QStringLiteral("tell app \"System Events\" to shut down"));
     if (normalized == QStringLiteral("resource_manager"))
         return QProcess::startDetached(QStringLiteral("open"), QStringList() << QStringLiteral("-a") << QStringLiteral("Finder"));
     if (normalized == QStringLiteral("task_manager"))
@@ -61,10 +56,6 @@ bool InputUtil::execRemoteOperation(const QString &action, QString *errorMessage
         return QProcess::startDetached(QStringLiteral("loginctl"), QStringList() << QStringLiteral("lock-session"));
     if (normalized == QStringLiteral("logoff"))
         return QProcess::startDetached(QStringLiteral("loginctl"), QStringList() << QStringLiteral("terminate-user") << qgetenv("USER"));
-    if (normalized == QStringLiteral("restart"))
-        return QProcess::startDetached(QStringLiteral("systemctl"), QStringList() << QStringLiteral("reboot"));
-    if (normalized == QStringLiteral("shutdown"))
-        return QProcess::startDetached(QStringLiteral("systemctl"), QStringList() << QStringLiteral("poweroff"));
     if (normalized == QStringLiteral("resource_manager"))
         return QProcess::startDetached(QStringLiteral("xdg-open"), QStringList() << QDir::homePath());
     if (normalized == QStringLiteral("task_manager"))

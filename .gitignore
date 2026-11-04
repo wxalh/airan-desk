@@ -29,6 +29,7 @@ __pycache__/
 *.py[cod]
 
 # Keep release-contract tests and their fixtures in the repository.
+tools/tests
 !tools/tests/verify_openh264_release_contract.cmake
 !tools/tests/verify_ffmpeg_metadata_fixtures.cmake
 !tools/tests/verify_ffmpeg_release_gate_fixtures.cmake

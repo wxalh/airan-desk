@@ -104,11 +104,15 @@ void ControlWindow::updateImg(const QImage &img)
         return;
     }
 
+    QPixmap pixmap = QPixmap::fromImage(img, Qt::ColorOnly);
+    if (pixmap.isNull())
+    {
+        LOG_ERROR("Failed to convert QImage to QPixmap, image size: {}x{}, format: {}",
+                  img.width(), img.height(), static_cast<int>(img.format()));
+        return;
+    }
     switchToCpuVideoWidget();
-
-    if (!isReceivedImg)
-        markConnectionWaitingFrameDone();
-    isReceivedImg = true;
+    m_sourcePixmap = pixmap;
     if (m_remoteResolution != img.size())
     {
         m_remoteResolution = img.size();
@@ -131,19 +135,12 @@ void ControlWindow::updateImg(const QImage &img)
         refreshStatsLabel();
     }
 
+    if (!isReceivedImg)
+        markConnectionWaitingFrameDone();
     if (!windowSizeAdjusted)
         adjustWindowSizeToVideo(img.size());
     m_windowSize = img.size();
 
-    QPixmap pixmap = QPixmap::fromImage(img, Qt::ColorOnly);
-    if (pixmap.isNull())
-    {
-        LOG_ERROR("Failed to convert QImage to QPixmap, image size: {}x{}, format: {}",
-                  img.width(), img.height(), static_cast<int>(img.format()));
-        return;
-    }
-
-    m_sourcePixmap = pixmap;
     m_cachedScaledTargetSize = QSize();
     m_cachedScaledPixmapSize = QSize();
     if (!m_fitToWindow)

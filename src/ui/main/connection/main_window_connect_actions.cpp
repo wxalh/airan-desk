@@ -58,7 +58,7 @@ void MainWindow::on_local_pwd_change_clicked()
         return;
     }
     m_accessPolicyGeneration->fetch_add(1);
-    m_localPwdEdit->setText(ConfigUtil->getLocalPwd());
+    m_localPwdEdit->setPlainText(ConfigUtil->getLocalPwd());
 }
 
 

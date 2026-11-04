@@ -2,7 +2,7 @@
 #define APP_RUNTIME_INTERNAL_H
 
 #ifndef AIRAN_DESK_VERSION
-#define AIRAN_DESK_VERSION "1.1.5"
+#error "AIRAN_DESK_VERSION must be provided by CMakeLists.txt"
 #endif
 
 namespace AppRuntime

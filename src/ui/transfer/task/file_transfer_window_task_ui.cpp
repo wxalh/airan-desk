@@ -67,7 +67,7 @@ void FileTransferWindow::updateTransferTaskUi(TransferTask &task)
     auto *progressLabel = new QLabel(ui->transferLogTable);
     progressLabel->setObjectName(QStringLiteral("transferProgressLabel"));
     progressLabel->setAlignment(Qt::AlignCenter);
-    progressLabel->setStyleSheet(QStringLiteral("background: transparent; color: rgb(131, 193, 224); padding: 0 6px;"));
+    progressLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     ui->transferLogTable->setCellWidget(task.row, 2, progressLabel);
     task.progressLabel = progressLabel;
 
@@ -77,30 +77,13 @@ void FileTransferWindow::updateTransferTaskUi(TransferTask &task)
     cancelButton->setToolTip(tr("Cancel"));
     cancelButton->setCursor(Qt::PointingHandCursor);
     cancelButton->setFlat(true);
-    cancelButton->setMinimumSize(32, 24);
-    cancelButton->setMaximumHeight(24);
-    cancelButton->setStyleSheet(QStringLiteral(
-        "QPushButton#transferActionButton {"
-        "    background: transparent;"
-        "    border: none;"
-        "    color: #ff7a90;"
-        "    font-size: 15px;"
-        "    font-weight: 700;"
-        "    padding: 0;"
-        "}"
-        "QPushButton#transferActionButton:hover {"
-        "    color: #ffffff;"
-        "    background: transparent;"
-        "}"
-        "QPushButton#transferActionButton:disabled {"
-        "    color: #7a7d82;"
-        "    background: transparent;"
-        "}"));
+    cancelButton->setMinimumSize(36, 30);
+    cancelButton->setProperty("transferStatus", QStringLiteral("active"));
     cancelButton->setProperty("transferId", task.transferId);
     connect(cancelButton, &QPushButton::clicked, this, &FileTransferWindow::onTransferCancelClicked);
 
     auto *actionHost = new QWidget(ui->transferLogTable);
-    actionHost->setStyleSheet(QStringLiteral("background: #181818;"));
+    actionHost->setObjectName(QStringLiteral("transferActionHost"));
     auto *actionLayout = new QHBoxLayout(actionHost);
     actionLayout->setContentsMargins(0, 0, 0, 0);
     actionLayout->setSpacing(0);

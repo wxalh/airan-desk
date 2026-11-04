@@ -35,6 +35,8 @@ void TerminalFilePanel::connectUiSignals()
     connect(m_refreshButton, &QToolButton::clicked, this, &TerminalFilePanel::onRefreshClicked);
     connect(m_downloadButton, &QToolButton::clicked, this, &TerminalFilePanel::onDownloadClicked);
     connect(m_uploadFileButton, &QToolButton::clicked, this, &TerminalFilePanel::onUploadFileClicked);
+    connect(m_shutdownButton, &QToolButton::clicked, this, [this]() { confirmRemotePowerOperation(false); });
+    connect(m_restartButton, &QToolButton::clicked, this, [this]() { confirmRemotePowerOperation(true); });
     connect(m_uploadDirectoryButton, &QToolButton::clicked, this, &TerminalFilePanel::onUploadDirectoryClicked);
     connect(m_driveCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &TerminalFilePanel::onDriveChanged);
     connect(m_remoteTable, &QTableWidget::cellDoubleClicked, this, &TerminalFilePanel::onRemoteCellDoubleClicked);

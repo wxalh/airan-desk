@@ -3,6 +3,7 @@
 
 #include <QFont>
 #include <QIcon>
+#include <QColor>
 
 class QLineEdit;
 class QToolButton;
@@ -15,7 +16,7 @@ constexpr const char *kPasswordHiddenFontProperty = "_airanPasswordHiddenFont";
 constexpr const char *kPasswordVisibleFontProperty = "_airanPasswordVisibleFont";
 
 
-QIcon makeEyeIcon(bool visible);
+QIcon makeEyeIcon(bool visible, const QColor &color);
 
 
 void setPasswordStyleActive(QLineEdit *lineEdit, bool active);

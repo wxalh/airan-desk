@@ -7,6 +7,13 @@
 
 bool WebRtcCtl::handleFileTransferTextChannelObject(const QJsonObject &object, const QString &msgType)
 {
+    if (msgType == Constant::TYPE_REMOTE_OPERATION)
+    {
+        emit recvRemoteOperationRes(JsonUtil::getBool(object, Constant::KEY_STATUS, false),
+                                    JsonUtil::getString(object, Constant::KEY_ACTION),
+                                    JsonUtil::getString(object, Constant::KEY_ERROR));
+        return true;
+    }
     if (msgType == Constant::TYPE_UPLOAD_FILE_RES)
     {
         const QString cliPath = JsonUtil::getString(object, Constant::KEY_PATH_CLI);

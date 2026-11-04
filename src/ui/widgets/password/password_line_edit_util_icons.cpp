@@ -6,7 +6,7 @@
 
 namespace PasswordLineEditInternal
 {
-QIcon makeEyeIcon(bool visible)
+QIcon makeEyeIcon(bool visible, const QColor &color)
 {
     QPixmap pixmap(kIconCanvasSize, kIconCanvasSize);
     pixmap.fill(Qt::transparent);
@@ -14,7 +14,6 @@ QIcon makeEyeIcon(bool visible)
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
 
-    const QColor color(131, 193, 224);
     QPen pen(color, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);

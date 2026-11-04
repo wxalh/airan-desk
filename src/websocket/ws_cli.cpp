@@ -25,6 +25,15 @@ WsCli::WsCli(QObject *parent)
     m_reconnect_followup_timer = new QTimer(this);
     m_reconnect_followup_timer->setSingleShot(true);
     m_heart_timer = new QTimer(this);
+    m_presence_timer = new QTimer(this);
+    m_presence_timer->setInterval(250);
+    m_presence_query_timer = new QTimer(this);
+    m_presence_query_timer->setSingleShot(true);
+    m_presenceClock.start();
+    connect(m_presence_timer, &QTimer::timeout, this, &WsCli::expirePresenceRequests);
+    connect(m_presence_query_timer, &QTimer::timeout, this, [this]() {
+        queryDevicePresence(m_presenceDevices.values());
+    });
     connect(this, SIGNAL(startReconnectTimer(int)), m_reconnect_timer, SLOT(start(int)));
     connect(this, SIGNAL(stopReconnectTimer()), m_reconnect_timer, SLOT(stop()));
     connect(this, SIGNAL(stopReconnectTimer()), m_reconnect_followup_timer, SLOT(stop()));
@@ -54,6 +63,7 @@ void WsCli::performShutdown()
     emit stopHeartTimer();
     emit stopReconnectTimer();
     m_connected = false;
+    clearPresenceState();
     clearPendingMessages();
 
     destroySocket();
@@ -100,6 +110,7 @@ void WsCli::init(const QString &url, quint64 heart_interval_ms)
     m_heart_interval_ms = heart_interval_ms;
     m_url = QUrl(url.trimmed(), QUrl::StrictMode);
     m_connected = false;
+    clearPresenceState();
     ++m_messageGeneration;
     m_socketConnectTimer.invalidate();
     m_reconnect_phase = 0;
@@ -147,6 +158,7 @@ void WsCli::resetUrlAndReconnect(const QString &url)
 {
     m_url = QUrl(url.trimmed(), QUrl::StrictMode);
     m_connected = false;
+    clearPresenceState();
     ++m_messageGeneration;
     m_socketConnectTimer.invalidate();
     m_reconnect_phase = 0;

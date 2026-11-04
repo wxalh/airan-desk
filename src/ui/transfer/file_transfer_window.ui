@@ -165,9 +165,6 @@
    </item>
    <item>
     <widget class="QLabel" name="transferLogLabel">
-     <property name="styleSheet">
-      <string notr="true">font-weight: bold; font-size: 12pt;</string>
-     </property>
      <property name="text">
       <string>Transfer log</string>
      </property>

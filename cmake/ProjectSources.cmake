@@ -51,6 +51,11 @@ set(SRC_FILES
     src/security/terminal_command_log.cpp
     src/security/controlled_access_gate.cpp
     src/security/notification_script_runner.cpp
+    src/devices/device_vault.cpp
+    src/devices/device_vault_credentials.cpp
+    src/ui/devices/device_manager_dialog.cpp
+    src/ui/devices/device_editor_dialog.cpp
+    src/ui/devices/device_password_dialog.cpp
     src/util/qt/qt_callback_util.cpp
     src/main.cpp
     src/terminal/emulator/core/native_terminal_widget_callbacks.cpp
@@ -139,6 +144,7 @@ set(SRC_FILES
     src/ui/transfer/view/file_transfer_window_ui.cpp
     src/ui/main/client/main_window_client.cpp
     src/ui/main/connection/main_window_connect_actions.cpp
+    src/ui/main/connection/main_window_devices.cpp
     src/ui/main/main_window.cpp
     src/ui/main/events/main_window_events.cpp
     src/ui/main/layout/main_window_layout_actions.cpp
@@ -214,6 +220,7 @@ set(SRC_FILES
     src/util/input/input_util.cpp
     src/util/input/input_util_program.cpp
     src/util/input/input_util_remote_ops.cpp
+    src/util/input/input_util_power.cpp
     src/util/json/json_object_builder.cpp
     src/util/json/json_util_access.cpp
     src/util/json/json_util.cpp
@@ -365,6 +372,9 @@ set(HDR_FILES
     src/security/terminal_command_log.h
     src/security/controlled_access_gate.h
     src/security/notification_script_runner.h
+    src/devices/device_vault.h
+    src/devices/device_vault_credentials.h
+    src/ui/devices/device_manager_dialog.h
     src/common/object_lifecycle.h
     src/common/platform_headers.h
     src/common/protocol_constants.h
@@ -378,6 +388,9 @@ set(HDR_FILES
     src/ui/chrome/app_title_bar.h
     src/ui/chrome/app_title_bar_icons.h
     src/ui/common/adaptive_ui.h
+    src/ui/main/layout/main_window_home_layout.h
+    src/ui/control/connection/control_window_connection_progress_view.h
+    src/ui/main/layout/main_window_responsive_layout.h
     src/ui/control/control_window.h
     src/ui/control/connection/control_window_connection_progress_state.h
     src/ui/control/control_window_view_helpers.h
@@ -390,6 +403,7 @@ set(HDR_FILES
     src/ui/settings/audio/settings_audio_backend_internal.h
     src/ui/settings/audio/settings_audio_backend_win_common.h
     src/ui/settings/window/settings_window.h
+    src/ui/settings/window/settings_page_layout.h
     src/ui/settings/licenses/license_catalog.h
     src/ui/settings/licenses/license_viewer_dialog.h
     src/ui/terminal/terminal_log_util.h
