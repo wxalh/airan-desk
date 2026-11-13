@@ -254,12 +254,27 @@ function(_airan_webrtc_metadata_for_library library_path output_prefix)
     set(${output_prefix}_BUILD_ARGS_FILE "${_build_args_file}" PARENT_SCOPE)
     set(${output_prefix}_SOURCE_REVISION_FILE
         "${_source_revision_file}" PARENT_SCOPE)
+
+    # PipeWire-enabled WebRTC archives export weak pw_* forwarding functions.
+    # Their loader must run even when the application also links PipeWire.
+    file(STRINGS "${_build_args_file}" _pipewire_enabled
+        REGEX "^[ \t]*rtc_use_pipewire[ \t]*=[ \t]*true([ \t]|$)")
+    if(_pipewire_enabled)
+        set(${output_prefix}_USE_PIPEWIRE 1 PARENT_SCOPE)
+    else()
+        set(${output_prefix}_USE_PIPEWIRE 0 PARENT_SCOPE)
+    endif()
 endfunction()
 
 _airan_webrtc_metadata_for_library(
     "${LIBWEBRTC_LIBRARY}" LIBWEBRTC_RELEASE)
 _airan_webrtc_metadata_for_library(
     "${LIBWEBRTC_DEBUG_LIBRARY}" LIBWEBRTC_DEBUG)
+
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(libwebrtc INTERFACE
+        "AIRAN_WEBRTC_USE_PIPEWIRE=$<IF:$<CONFIG:Debug>,${LIBWEBRTC_DEBUG_USE_PIPEWIRE},${LIBWEBRTC_RELEASE_USE_PIPEWIRE}>")
+endif()
 
 set(LIBWEBRTC_METADATA_DIR
     "$<IF:$<CONFIG:Debug>,${LIBWEBRTC_DEBUG_METADATA_DIR},${LIBWEBRTC_RELEASE_METADATA_DIR}>")

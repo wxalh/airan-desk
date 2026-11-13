@@ -11,6 +11,7 @@
 #ifndef AIRAN_DESKTOP_CAPTURE_LINUX_WAYLAND_BASE_CAPTURER_PIPEWIRE_H_
 #define AIRAN_DESKTOP_CAPTURE_LINUX_WAYLAND_BASE_CAPTURER_PIPEWIRE_H_
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 
@@ -82,11 +83,11 @@ class RTC_EXPORT BaseCapturerPipeWire
   DesktopCaptureOptions options_ = {};
   Callback* callback_ = nullptr;
   bool send_frames_immediately_ = false;
-  bool capturer_failed_ = false;
+  std::atomic_bool capturer_failed_{false};
   bool is_screencast_portal_ = false;
   bool is_portal_open_ = false;
 
-  Observer* delegated_source_list_observer_ = nullptr;
+  std::atomic<Observer*> delegated_source_list_observer_{nullptr};
 
   // SourceId that is selected using SelectSource() and that we previously
   // returned in GetSourceList(). This should be a SourceId that has a restore

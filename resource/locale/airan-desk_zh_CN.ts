@@ -631,6 +631,18 @@ Capture: %5 | Encoder: %6 | Audio: %7 | Network: %8 | Display: %9%10</source>
         <source>The remote device closed this connection.</source>
         <translation>被控端已关闭此连接。</translation>
     </message>
+    <message>
+        <source>Screen sharing authorization was cancelled on the remote device.</source>
+        <translation>被控端已取消屏幕共享授权。</translation>
+    </message>
+    <message>
+        <source>Screen capture failed on the remote device.</source>
+        <translation>被控端屏幕采集失败。</translation>
+    </message>
+    <message>
+        <source>Screen sharing ended on the remote device.</source>
+        <translation>被控端屏幕共享已结束。</translation>
+    </message>
 </context>
 <context>
     <name>FilePacketUtil</name>

@@ -146,6 +146,8 @@ private:
     bool m_destroying = false;
     std::atomic_bool m_shutdownStarted{false};
     std::atomic_bool m_shutdownRequested{false};
+    std::atomic_bool m_captureStoppedPosted{false};
+    std::atomic<airan::media::CaptureStopReason> m_captureStopReason{airan::media::CaptureStopReason::Error};
     bool m_remoteDescriptionSet = false;
     bool m_remoteDescriptionInFlight = false;
     QString m_pendingRemoteDescriptionData;
@@ -385,6 +387,7 @@ public slots:
     void drainCaptureState();
 
 private slots:
+    void handleCaptureStopped();
     void startMediaCapture();
     void stopMediaCapture();
     void setupFileChannelCallbacks();
@@ -514,6 +517,7 @@ private:
     void onTerminalInfoReady(const QString &osName, const QString &shellPath, const QString &mode, bool pathTracking);
     void onAiranCaptureFrame(airan::media::CaptureFrameDescriptor frame) override;
     void onAiranCaptureTransition(const airan::media::PathTransition &transition) override;
+    void onAiranCaptureStopped(airan::media::CaptureStopReason reason) override;
 
     void setRemoteDescription(const QString &data, const QString &type);
     void addIceCandidate(const QString &candidate, const QString &mid);

@@ -55,6 +55,7 @@ class RTC_EXPORT DesktopCapturerDifferWrapper
   void SetExcludedWindow(WindowId window) override;
   bool GetSourceList(SourceList* screens) override;
   bool SelectSource(SourceId id) override;
+  DelegatedSourceListController* GetDelegatedSourceListController() override;
   bool FocusOnSelectedSource() override;
   bool IsOccluded(const DesktopVector& pos) override;
 #if defined(WEBRTC_USE_GIO)

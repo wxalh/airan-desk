@@ -83,43 +83,43 @@ void BaseCapturerPipeWire::OnScreenCastRequestResult(RequestResponse result,
                                                      int fd) {
   is_portal_open_ = false;
 
-  // Reset the value of capturer_failed_ in case we succeed below. If we fail,
-  // then it'll set it to the right value again soon enough.
-  capturer_failed_ = false;
-  if (result != RequestResponse::kSuccess ||
-      !options_.screencast_stream() ||
-      !options_.screencast_stream()->StartScreenCastStream(
+  bool stream_started = false;
+  if (result == RequestResponse::kSuccess) {
+    stream_started = options_.screencast_stream() &&
+        options_.screencast_stream()->StartScreenCastStream(
           stream_node_id, fd, options_.get_width(), options_.get_height(),
           options_.prefer_cursor_embedded(),
-          send_frames_immediately_ ? callback_ : nullptr)) {
-    capturer_failed_ = true;
-    LOG_ERROR("ScreenCastPortal failed: {}", static_cast<uint>(result));
-  } else if (ScreenCastPortal* screencast_portal = GetScreenCastPortal()) {
-    if (!screencast_portal->RestoreToken().empty()) {
-      const SourceId token_id =
-          selected_source_id_ ? selected_source_id_ : source_id_;
-      RestoreTokenManager::GetInstance().AddToken(
-          token_id, screencast_portal->RestoreToken());
+          send_frames_immediately_ ? callback_ : nullptr);
+    if (!stream_started) {
+      LOG_ERROR("Screen sharing was authorized, but the PipeWire capture stream failed to start");
+    }
+  } else if (result == RequestResponse::kUserCancelled) {
+    LOG_INFO("Screen sharing authorization was cancelled");
+  } else {
+    LOG_ERROR("ScreenCastPortal request failed: response={}", static_cast<uint>(result));
+  }
+  if (stream_started) {
+    if (ScreenCastPortal* screencast_portal = GetScreenCastPortal()) {
+      if (!screencast_portal->RestoreToken().empty()) {
+        const SourceId token_id =
+            selected_source_id_ ? selected_source_id_ : source_id_;
+        RestoreTokenManager::GetInstance().AddToken(
+            token_id, screencast_portal->RestoreToken());
+      }
     }
   }
 
-  if (!delegated_source_list_observer_)
-    return;
-
-  switch (result) {
-    case RequestResponse::kUnknown:
-      RTC_DCHECK_NOTREACHED();
-      break;
-    case RequestResponse::kSuccess:
-      delegated_source_list_observer_->OnSelection();
-      break;
-    case RequestResponse::kUserCancelled:
-      delegated_source_list_observer_->OnCancelled();
-      break;
-    case RequestResponse::kError:
-      delegated_source_list_observer_->OnError();
-      break;
+  // Publish the reason before the capture thread can see ERROR_PERMANENT.
+  if (Observer* observer = delegated_source_list_observer_.load()) {
+    if (stream_started) {
+      observer->OnSelection();
+    } else if (result == RequestResponse::kUserCancelled) {
+      observer->OnCancelled();
+    } else {
+      observer->OnError();
+    }
   }
+  capturer_failed_.store(!stream_started);
 }
 
 void BaseCapturerPipeWire::OnScreenCastSessionClosed() {
@@ -222,8 +222,8 @@ void BaseCapturerPipeWire::SetAiranCaptureCallback(
 }
 
 void BaseCapturerPipeWire::Observe(Observer* observer) {
-  RTC_DCHECK(!delegated_source_list_observer_ || !observer);
-  delegated_source_list_observer_ = observer;
+  RTC_DCHECK(!delegated_source_list_observer_.load() || !observer);
+  delegated_source_list_observer_.store(observer);
 }
 
 void BaseCapturerPipeWire::EnsureVisible() {

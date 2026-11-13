@@ -12,13 +12,24 @@
 
 #include <pipewire/pipewire.h>
 
+#if AIRAN_WEBRTC_USE_PIPEWIRE
+#include "modules/portal/pipewire_utils.h"
+#endif
+
 #include "rtc_base/sanitizer.h"
 
 namespace airan::desktop_capture {
 
 RTC_NO_SANITIZE("cfi-icall")
 bool InitializePipeWire() {
+#if AIRAN_WEBRTC_USE_PIPEWIRE
+  // Linking libpipewire does not initialize the weak pw_* stubs exported by
+  // WebRTC. Prepare them before any caller reaches pw_init or another pw_* API.
+  return webrtc::InitializePipeWire();
+#else
+  // Packages built without WebRTC's PipeWire backend use the linked DSO.
   return true;
+#endif
 }
 
 PipeWireThreadLoopLock::PipeWireThreadLoopLock(pw_thread_loop* loop)

@@ -54,12 +54,19 @@ void ControlWindow::initCLI()
 
 void ControlWindow::onRemoteDisconnectRequested(const QString &reason, bool peerWide)
 {
-    Q_UNUSED(reason);
     if (isClosing())
         return;
     if (!peerWide)
-        QMessageBox::information(this, tr("Connection closed"),
-                                 tr("The remote device closed this connection."));
+    {
+        QString message = tr("The remote device closed this connection.");
+        if (reason == QStringLiteral("screen_capture_cancelled"))
+            message = tr("Screen sharing authorization was cancelled on the remote device.");
+        else if (reason == QStringLiteral("screen_capture_failed"))
+            message = tr("Screen capture failed on the remote device.");
+        else if (reason == QStringLiteral("screen_capture_ended"))
+            message = tr("Screen sharing ended on the remote device.");
+        QMessageBox::information(this, tr("Connection closed"), message);
+    }
     beginAsyncShutdown();
 }
 

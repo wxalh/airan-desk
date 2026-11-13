@@ -2,8 +2,10 @@
 
 #include "media/capture/core/airan_capture_interface.h"
 #include "rtc/core/rtc_internal.h"
+#include "rtc/media/capture/desktop_capture_recovery.h"
 
 #include "desktop_capture/desktop_capturer.h"
+#include "desktop_capture/delegated_source_list_controller.h"
 
 #include <atomic>
 #include <chrono>
@@ -21,6 +23,7 @@ scoped_refptr<DesktopVideoSource> createAiranDesktopCaptureSource(const Descript
 
 class AiranDesktopCaptureSource : public DesktopVideoSource,
                                   private airan::desktop_capture::DesktopCapturer::Callback,
+                                  private airan::desktop_capture::DelegatedSourceListController::Observer,
                                   private airan::media::AiranCaptureCallback
 {
 public:
@@ -81,6 +84,9 @@ private:
                          std::unique_ptr<airan::desktop_capture::DesktopFrame> frame) override;
     void onAiranCaptureFrame(airan::media::CaptureFrameDescriptor frame) override;
     void onAiranCaptureTransition(const airan::media::PathTransition &transition) override;
+    void OnSelection() override;
+    void OnCancelled() override;
+    void OnError() override;
 
     int m_sourceIndex = 0;
     intptr_t m_sourceId = 0;
@@ -101,7 +107,8 @@ private:
     bool m_airanDescriptorInCurrentCapture = false;
     bool m_nativeDescriptorInCurrentCapture = false;
     bool m_webrtcFrameInCurrentCapture = false;
-    int m_consecutiveCaptureFailures = 0;
+    DesktopCaptureRecovery m_captureRecovery;
+    std::atomic<airan::media::CaptureStopReason> m_captureStopReason{airan::media::CaptureStopReason::Error};
     airan::media::EncodePath m_currentEncodePath = airan::media::EncodePath::CpuSoftwareEncode;
     std::chrono::steady_clock::time_point m_nextSecureDesktopAttempt{};
     bool m_secureDesktopCaptureAvailable = false;

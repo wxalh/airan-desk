@@ -239,11 +239,20 @@ RTC_NO_SANITIZE("cfi-icall")
 static bool OpenEGL() {
   g_lib_egl = dlopen("libEGL.so.1", RTLD_NOW | RTLD_GLOBAL);
   if (g_lib_egl) {
+    dlerror();
     EglGetProcAddress =
         (eglGetProcAddress_func)dlsym(g_lib_egl, "eglGetProcAddress");
+    if (!EglGetProcAddress) {
+      const char* error = dlerror();
+      LOG_ERROR("libEGL.so.1 is missing eglGetProcAddress: {}",
+                error ? error : "no loader error reported");
+    }
     return EglGetProcAddress;
   }
 
+  const char* error = dlerror();
+  LOG_ERROR("Unable to open libEGL.so.1: {}",
+            error ? error : "no loader error reported");
   return false;
 }
 
@@ -272,11 +281,32 @@ static bool LoadEGL() {
         (glEGLImageTargetTexture2DOES_func)EglGetProcAddress(
             "glEGLImageTargetTexture2DOES");
 
-    return EglBindAPI && EglCreateContext && EglCreateImageKHR &&
-           EglTerminate && EglDestroyContext && EglDestroyImageKHR &&
-           EglGetError && EglGetPlatformDisplayEXT && EglGetPlatformDisplay &&
-           EglInitialize && EglMakeCurrent && EglQueryString &&
-           GlEGLImageTargetTexture2DOES;
+    const struct {
+      const char* name;
+      bool available;
+    } required_functions[] = {
+        {"eglBindAPI", EglBindAPI != nullptr},
+        {"eglCreateContext", EglCreateContext != nullptr},
+        {"eglCreateImageKHR", EglCreateImageKHR != nullptr},
+        {"eglTerminate", EglTerminate != nullptr},
+        {"eglDestroyContext", EglDestroyContext != nullptr},
+        {"eglDestroyImageKHR", EglDestroyImageKHR != nullptr},
+        {"eglGetError", EglGetError != nullptr},
+        {"eglGetPlatformDisplayEXT", EglGetPlatformDisplayEXT != nullptr},
+        {"eglGetPlatformDisplay", EglGetPlatformDisplay != nullptr},
+        {"eglInitialize", EglInitialize != nullptr},
+        {"eglMakeCurrent", EglMakeCurrent != nullptr},
+        {"eglQueryString", EglQueryString != nullptr},
+        {"glEGLImageTargetTexture2DOES", GlEGLImageTargetTexture2DOES != nullptr},
+    };
+    bool loaded = true;
+    for (const auto& function : required_functions) {
+      if (!function.available) {
+        LOG_ERROR("Missing required EGL entry function: {}", function.name);
+        loaded = false;
+      }
+    }
+    return loaded;
   }
 
   return false;

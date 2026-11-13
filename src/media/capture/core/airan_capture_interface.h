@@ -33,12 +33,16 @@ struct PathTransition
     bool pipeline_reinit = false;
 };
 
+enum class CaptureStopReason { Cancelled, Error, Ended };
+
 class AiranCaptureCallback
 {
 public:
     virtual ~AiranCaptureCallback() = default;
     virtual void onAiranCaptureFrame(CaptureFrameDescriptor frame) = 0;
     virtual void onAiranCaptureTransition(const PathTransition &transition) = 0;
+    // Terminal delegated capture state, including cancelled or ended sharing.
+    virtual void onAiranCaptureStopped(CaptureStopReason) {}
 };
 
 struct FallbackPolicyConfig

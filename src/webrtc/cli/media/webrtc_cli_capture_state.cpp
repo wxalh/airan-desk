@@ -206,6 +206,45 @@ void WebRtcCli::onAiranCaptureTransition(const airan::media::PathTransition &tra
                         QString());
 }
 
+void WebRtcCli::onAiranCaptureStopped(airan::media::CaptureStopReason reason)
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() ||
+        m_captureStoppedPosted.exchange(true))
+        return;
+    m_captureStopReason.store(reason);
+
+    // Capture callbacks may run on the capture thread. Always queue teardown so
+    // closing its track cannot stop and join that thread from within itself.
+    if (!QMetaObject::invokeMethod(this, "handleCaptureStopped", Qt::QueuedConnection))
+    {
+        m_captureStoppedPosted.store(false);
+        LOG_ERROR("Unable to queue desktop sharing disconnect: session={}", m_sessionId);
+    }
+}
+
+void WebRtcCli::handleCaptureStopped()
+{
+    if (m_shutdownRequested.load() || m_shutdownStarted.load() || m_destroying || m_isOnlyFile)
+        return;
+
+    QString reason;
+    switch (m_captureStopReason.load())
+    {
+    case airan::media::CaptureStopReason::Cancelled:
+        reason = QStringLiteral("screen_capture_cancelled");
+        break;
+    case airan::media::CaptureStopReason::Error:
+        reason = QStringLiteral("screen_capture_failed");
+        break;
+    case airan::media::CaptureStopReason::Ended:
+        reason = QStringLiteral("screen_capture_ended");
+        break;
+    }
+    LOG_INFO("Desktop sharing stopped; disconnecting controlled session: session={}, reason={}", m_sessionId, reason);
+    sendSessionDisconnect(reason);
+    requestDisconnect(reason);
+}
+
 void WebRtcCli::applyCapturePipelineState(const QString &captureMethod,
                                           const QString &capturePath,
                                           const QString &encodePath,

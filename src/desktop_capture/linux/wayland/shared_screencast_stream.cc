@@ -38,6 +38,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <optional>
@@ -479,17 +480,31 @@ bool SharedScreenCastStreamPrivate::StartScreenCastStream(
     return false;
   }
   egl_dmabuf_ = std::make_unique<EglDmaBuf>();
+  if (!egl_dmabuf_->IsEglInitialized()) {
+    LOG_WARN("EGL DMA-BUF is unavailable; using PipeWire shared-memory capture.");
+  }
 
   pw_stream_node_id_ = stream_node_id;
 
   pw_initializer_ = std::make_unique<PipeWireInitializer>();
 
   pw_main_loop_ = pw_thread_loop_new("pipewire-main-loop", nullptr);
+  if (!pw_main_loop_) {
+    LOG_ERROR("Failed to create PipeWire main loop: {} (errno={})", strerror(errno), errno);
+    return false;
+  }
 
   pw_context_ =
       pw_context_new(pw_thread_loop_get_loop(pw_main_loop_), nullptr, 0);
   if (!pw_context_) {
-    LOG_ERROR("Failed to create PipeWire context");
+    const int error = errno;
+    LOG_ERROR("Failed to create PipeWire context: {} (errno={}), config={}, prefix={}, name={}, modules={}, spa={}",
+              strerror(error), error,
+              getenv("PIPEWIRE_CONFIG_DIR") ? getenv("PIPEWIRE_CONFIG_DIR") : "<default>",
+              getenv("PIPEWIRE_CONFIG_PREFIX") ? getenv("PIPEWIRE_CONFIG_PREFIX") : "<default>",
+              getenv("PIPEWIRE_CONFIG_NAME") ? getenv("PIPEWIRE_CONFIG_NAME") : "client.conf",
+              getenv("PIPEWIRE_MODULE_DIR") ? getenv("PIPEWIRE_MODULE_DIR") : "<default>",
+              getenv("SPA_PLUGIN_DIR") ? getenv("SPA_PLUGIN_DIR") : "<default>");
     return false;
   }
 

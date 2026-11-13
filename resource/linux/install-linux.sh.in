@@ -308,6 +308,15 @@ if [ -d "$script_dir/lib" ]; then
     done
 fi
 
+if [ -d "$script_dir/lib/pipewire-config" ]; then
+    find "$script_dir/lib/pipewire-config" -type f | while IFS= read -r file; do
+        rel=${file#"$script_dir/lib/"}
+        install -d "$libdir/$(dirname "$rel")"
+        install -m 0644 "$file" "$libdir/$rel"
+        printf '%s\n' "$libdir/$rel" >> "$manifest_tmp"
+    done
+fi
+
 if [ -d "$script_dir/plugins" ]; then
     rm -rf "$app_prefix/plugins"
     cp -R "$script_dir/plugins" "$app_prefix/plugins"

@@ -18,6 +18,10 @@
 #include <cerrno>
 #include <cstdint>
 
+struct pw_thread_loop;
+
+namespace airan::desktop_capture {
+
 struct dma_buf_sync {
   uint64_t flags;
 };
@@ -26,10 +30,6 @@ struct dma_buf_sync {
 #define DMA_BUF_SYNC_END (1 << 2)
 #define DMA_BUF_BASE 'b'
 #define DMA_BUF_IOCTL_SYNC _IOW(DMA_BUF_BASE, 0, struct dma_buf_sync)
-
-struct pw_thread_loop;
-
-namespace airan::desktop_capture {
 
 constexpr int kInvalidPipeWireFd = -1;
 

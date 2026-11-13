@@ -290,6 +290,7 @@ bool AiranDesktopCaptureSource::start()
 {
     if (m_running.exchange(true))
         return true;
+    m_recreateCapturerRequested.store(false);
     {
         std::lock_guard<std::recursive_mutex> lock(m_mutex);
         m_captureFallback = airan::media::CaptureFallbackStateMachine{};
@@ -486,7 +487,7 @@ void AiranDesktopCaptureSource::captureLoop()
         if (!capturedSecureFrame)
         {
             std::lock_guard<std::recursive_mutex> lock(m_mutex);
-            if (m_capturer)
+            if (m_capturer && !m_captureRecovery.stopped())
             {
                 m_airanDescriptorInCurrentCapture = false;
                 m_nativeDescriptorInCurrentCapture = false;
@@ -506,7 +507,8 @@ void AiranDesktopCaptureSource::captureLoop()
             std::lock_guard<std::recursive_mutex> lock(m_mutex);
             fps = m_fps;
         }
-        const auto interval = m_capturer ? frameInterval(fps) : kCaptureRecreateRetryInterval;
+        const auto interval = m_capturer && !m_captureRecovery.stopped()
+                                  ? frameInterval(fps) : kCaptureRecreateRetryInterval;
         std::this_thread::sleep_for(interval);
     }
 
@@ -522,6 +524,9 @@ bool AiranDesktopCaptureSource::createCapturerOnCaptureThread()
     m_capturer = airan::desktop_capture::DesktopCapturer::CreateScreenCapturer(options);
     if (!m_capturer)
         return false;
+    auto* delegatedController = m_capturer->GetDelegatedSourceListController();
+    m_captureRecovery.reset(delegatedController != nullptr);
+    m_captureStopReason.store(airan::media::CaptureStopReason::Error);
     m_capturer->SetMaxFrameRate(static_cast<uint32_t>(m_fps));
     m_capturer->SetAiranCaptureCallback(this);
     if (!selectSourceLocked())
@@ -530,6 +535,8 @@ bool AiranDesktopCaptureSource::createCapturerOnCaptureThread()
         m_capturer.reset();
         return false;
     }
+    if (delegatedController)
+        delegatedController->Observe(this);
     m_capturer->Start(this);
     return true;
 }
@@ -539,6 +546,8 @@ void AiranDesktopCaptureSource::destroyCapturerOnCaptureThread()
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     if (!m_capturer)
         return;
+    if (auto* delegatedController = m_capturer->GetDelegatedSourceListController())
+        delegatedController->Observe(nullptr);
     m_capturer->SetAiranCaptureCallback(nullptr);
     m_capturer.reset();
 }
@@ -1309,6 +1318,21 @@ void AiranDesktopCaptureSource::notifyFrameSizeChanged(int width, int height)
         callback(width, height);
 }
 
+void AiranDesktopCaptureSource::OnSelection()
+{
+    m_captureStopReason.store(airan::media::CaptureStopReason::Ended);
+}
+
+void AiranDesktopCaptureSource::OnCancelled()
+{
+    m_captureStopReason.store(airan::media::CaptureStopReason::Cancelled);
+}
+
+void AiranDesktopCaptureSource::OnError()
+{
+    m_captureStopReason.store(airan::media::CaptureStopReason::Error);
+}
+
 void AiranDesktopCaptureSource::OnCaptureResult(airan::desktop_capture::DesktopCapturer::Result result,
                                                 std::unique_ptr<airan::desktop_capture::DesktopFrame> frame)
 {
@@ -1318,18 +1342,24 @@ void AiranDesktopCaptureSource::OnCaptureResult(airan::desktop_capture::DesktopC
             return;
         {
             std::lock_guard<std::recursive_mutex> lock(m_mutex);
-            ++m_consecutiveCaptureFailures;
-            if (m_consecutiveCaptureFailures >= 10)
+            const auto action = m_captureRecovery.onFailure(result);
+            if (action == DesktopCaptureRecovery::FailureAction::Ignore)
+                return;
+            if (action == DesktopCaptureRecovery::FailureAction::Stop)
+            {
+                LOG_WARN("Delegated screen capture stopped; closing the controlled session, reason={}",
+                         static_cast<int>(m_captureStopReason.load()));
+                if (m_externalCallback)
+                    m_externalCallback->onAiranCaptureStopped(m_captureStopReason.load());
+                return;
+            }
+            if (action == DesktopCaptureRecovery::FailureAction::Recreate)
             {
                 m_recreateCapturerRequested.store(true);
-                m_consecutiveCaptureFailures = 0;
                 LOG_WARN("Airan desktop capture has consecutive failures; capturer recreation queued");
             }
         }
-        const auto transition = m_captureFallback.markFailure(
-            result == airan::desktop_capture::DesktopCapturer::Result::ERROR_PERMANENT
-                ? airan::media::FallbackReason::CaptureError
-                : airan::media::FallbackReason::CaptureError);
+        const auto transition = m_captureFallback.markFailure(airan::media::FallbackReason::CaptureError);
         onAiranCaptureTransition(transition);
         return;
     }
@@ -1349,7 +1379,7 @@ void AiranDesktopCaptureSource::OnCaptureResult(airan::desktop_capture::DesktopC
     int frameHeight = 0;
     {
         std::lock_guard<std::recursive_mutex> lock(m_mutex);
-        m_consecutiveCaptureFailures = 0;
+        m_captureRecovery.onFrame();
         frameWidth = frame->size().width();
         frameHeight = frame->size().height();
         frameSizeChanged = updateCapturedSizeLocked(frameWidth, frameHeight, "captured");
@@ -1385,7 +1415,7 @@ void AiranDesktopCaptureSource::onAiranCaptureFrame(airan::media::CaptureFrameDe
     int frameHeight = frame.visible_rect.height;
     {
         std::lock_guard<std::recursive_mutex> lock(m_mutex);
-        m_consecutiveCaptureFailures = 0;
+        m_captureRecovery.onFrame();
         m_airanDescriptorInCurrentCapture = true;
         m_nativeDescriptorInCurrentCapture = hasNativeDescriptor;
         frameSizeChanged = updateCapturedSizeLocked(frameWidth, frameHeight, "native");

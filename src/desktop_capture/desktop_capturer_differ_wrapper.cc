@@ -192,6 +192,11 @@ bool DesktopCapturerDifferWrapper::SelectSource(SourceId id) {
   return base_capturer_->SelectSource(id);
 }
 
+DelegatedSourceListController*
+DesktopCapturerDifferWrapper::GetDelegatedSourceListController() {
+  return base_capturer_->GetDelegatedSourceListController();
+}
+
 bool DesktopCapturerDifferWrapper::FocusOnSelectedSource() {
   return base_capturer_->FocusOnSelectedSource();
 }
