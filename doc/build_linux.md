@@ -2,6 +2,8 @@
 
 简体中文 | [English](build_linux.en.md)
 
+在飞牛 OS 安装 NAS 被控端时，请使用 x86_64 或 ARM64 `.fpk`，见 [飞牛 OS 安装与打包](build_fnos.md)。
+
 ## 当前构建模型
 
 Linux 构建使用 Qt 5 UI、Google WebRTC 静态包、可选 FFmpeg shared/dev 运行时包、静态 `spdlog` 和静态 `libvterm`。项目要求 CMake 3.21+、C++20 和 GCC/G++ 11+。

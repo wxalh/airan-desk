@@ -40,8 +40,6 @@ struct Controls
     QPushButton *connect;
     QPushButton *share;
     QPushButton *update;
-    QPushButton *devices;
-    QPushButton *settings;
 };
 
 inline QString text(const char *source)
@@ -64,12 +62,11 @@ inline void apply(QWidget *content)
     page->setMaximumWidth(UiAdaptive::scaled(1120));
     page->layout()->setContentsMargins(margin, UiAdaptive::scaled(28), margin, UiAdaptive::scaled(24));
     page->layout()->setSpacing(UiAdaptive::scaled(20));
-    for (const QString &bandName : {QStringLiteral("homeToolbar"), QStringLiteral("homeFooter")})
-        if (QWidget *band = content->findChild<QWidget *>(bandName))
-        {
-            band->layout()->setContentsMargins(margin, UiAdaptive::scaled(10), margin, UiAdaptive::scaled(10));
-            band->layout()->setSpacing(UiAdaptive::scaled(24));
-        }
+    if (QWidget *footer = content->findChild<QWidget *>(QStringLiteral("homeFooter")))
+    {
+        footer->layout()->setContentsMargins(margin, UiAdaptive::scaled(10), margin, UiAdaptive::scaled(10));
+        footer->layout()->setSpacing(UiAdaptive::scaled(24));
+    }
 
     const bool wide = applyMainPanelsResponsiveLayout(grid, local, remote,
                                                        scroll->viewport()->width(), UiAdaptive::scaled(760));
@@ -164,22 +161,6 @@ inline void build(QWidget *content, const Controls &c)
     pageLayout->setObjectName(QStringLiteral("mainPageLayout"));
     pageLayout->setContentsMargins(0, 0, 0, 0);
     pageLayout->setSpacing(0);
-
-    auto *toolbar = new QWidget(content);
-    toolbar->setObjectName(QStringLiteral("homeToolbar"));
-    toolbar->setAttribute(Qt::WA_StyledBackground, true);
-    auto *toolbarLayout = new QHBoxLayout(toolbar);
-    auto *home = new QPushButton(text("Home"), toolbar);
-    home->setProperty("homeNavButton", true);
-    home->setProperty("active", true);
-    c.devices->setProperty("homeNavButton", true);
-    c.settings->setText(text("Settings"));
-    c.settings->setIcon(QIcon());
-    toolbarLayout->addWidget(home);
-    toolbarLayout->addWidget(c.devices);
-    toolbarLayout->addStretch(1);
-    toolbarLayout->addWidget(c.settings);
-    pageLayout->addWidget(toolbar);
 
     auto *scroll = new QScrollArea(content);
     scroll->setObjectName(QStringLiteral("homeScrollArea"));

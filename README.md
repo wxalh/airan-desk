@@ -20,7 +20,9 @@ Airan-Desk 是跨平台远程桌面管理工具，仅供设备所有者或经其
 
 简体中文 | [English](README.en.md)
 
-airan-desk 是一个基于 Qt 5/6 和 Google WebRTC Native API 的远程桌面控制应用，支持桌面画面传输、远程键鼠控制、文件传输和远程终端。当前面向 Windows、Linux 和 macOS 桌面环境。
+airan-desk 是一个基于 Qt 5/6 和 Google WebRTC Native API 的远程桌面控制应用。Windows、Linux 和 macOS 桌面版支持桌面画面传输、远程键鼠控制、文件传输和远程终端。
+
+**支持飞牛 OS（fnOS）**：提供 x86_64 和 ARM64 `.fpk`，可将 NAS 用作文件传输和远程终端的被控端。详见 [飞牛 OS 安装与打包](doc/build_fnos.md)。
 
 ## 安全与合规声明
 
@@ -84,8 +86,17 @@ Airan-Desk 不另行捆绑用户导入的 Cisco OpenH264 二进制。
 - [Windows 编译指南](doc/build_win.md)
 - [Linux 编译指南](doc/build_linux.md)
 - [macOS 编译说明](doc/build_mac.md)
+- [飞牛 OS 安装与打包](doc/build_fnos.md)
 
 ## 使用说明
+
+### 飞牛 OS（fnOS）
+
+1. 按 NAS 架构选择 `airan-desk-fnos-<版本>-amd64.fpk`（x86_64）或 `airan-desk-fnos-<版本>-arm64.fpk`，在飞牛应用中心手动安装。
+2. 打开飞牛桌面的 **Airan Desk** 图标，配置私有信令、STUN / TURN，并确认授权后启用远程访问。如需在飞牛上搭建信令和 TURN，可另装 [Signal Server + coturn](https://github.com/wxalh/signal-server) 的飞牛包。
+3. 点击 **分享** 复制设备码和验证码，粘贴到桌面版 Airan Desk，选择「文件传输」或「终端」连接。飞牛包不提供桌面画面、键鼠控制或虚拟桌面。
+
+设备码（ID）和连接密码（验证码）均为有效且非全零的 UUID。飞牛管理页中的设备 ID 只读；点击 **更换密码** 会由管理服务生成并立即保存新的 UUID，设备 ID 保持不变，已有连接会断开，之后分享会使用新验证码。TURN 用户名和密码按服务器配置填写，不受设备 UUID 规则限制。
 
 ### 启动前准备
 

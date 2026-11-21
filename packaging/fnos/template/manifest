@@ -1,0 +1,13 @@
+appname=airan-desk
+version=@VERSION@
+display_name=Airan Desk
+desc=飞牛 NAS 的远程文件与终端访问，支持私有信令和 TURN 配置。
+source=thirdparty
+platform=@PLATFORM@
+maintainer=wxalh
+maintainer_url=https://github.com/wxalh/airan-desk
+desktop_uidir=ui
+desktop_applaunchname=airan-desk.settings
+ctl_stop=true
+checkport=false
+disable_authorization_path=false

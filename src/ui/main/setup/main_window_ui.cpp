@@ -95,6 +95,8 @@ void MainWindow::bindUiObjects()
     m_settingsButton->setToolTip(tr("Settings"));
     m_settingsButton->setAccessibleName(tr("Settings"));
     m_settingsButton->setObjectName(QStringLiteral("mainSettingsButton"));
+    m_settingsButton->setText(tr("Settings"));
+    m_settingsButton->setIcon(QIcon());
     m_myDevicesButton = new QPushButton(tr("My devices"), m_content);
     m_myDevicesButton->setObjectName(QStringLiteral("myDevicesButton"));
     connect(m_myDevicesButton, &QPushButton::clicked, this, &MainWindow::openMyDevices);
@@ -121,6 +123,30 @@ void MainWindow::bindUiObjects()
     connect(m_settingsButton, &QPushButton::clicked, this, &MainWindow::openSettingsFromTray);
     m_remoteDesktopRadio->setChecked(true);
 
+    auto *navigation = new QWidget(m_titleBar);
+    navigation->setObjectName(QStringLiteral("mainTitleNavigation"));
+    auto *navigationLayout = new QHBoxLayout(navigation);
+    auto *homeButton = new QPushButton(tr("Home"), navigation);
+    homeButton->setObjectName(QStringLiteral("mainHomeButton"));
+    homeButton->setProperty("active", true);
+    homeButton->setAccessibleName(tr("Home"));
+    for (QPushButton *button : {homeButton, m_myDevicesButton, m_settingsButton})
+    {
+        button->setProperty("homeNavButton", true);
+        button->setCursor(Qt::ArrowCursor);
+        button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    }
+    navigationLayout->addWidget(homeButton);
+    navigationLayout->addWidget(m_myDevicesButton);
+    navigationLayout->addStretch(1);
+    navigationLayout->addWidget(m_settingsButton);
+    m_titleBar->setNavigationWidget(navigation);
+    connect(homeButton, &QPushButton::clicked, this, [this]() {
+        if (auto *scroll = m_content->findChild<QScrollArea *>(QStringLiteral("homeScrollArea")))
+            scroll->ensureVisible(0, 0);
+        m_remoteIdEdit->setFocus(Qt::ShortcutFocusReason);
+    });
+
     buildMainContentLayout();
 }
 
@@ -135,8 +161,7 @@ void MainWindow::buildMainContentLayout()
         m_wsConnectStatus, m_versionLabel,
         m_localIdEdit, m_localPwdEdit, m_remoteIdEdit, m_remotePwdEdit,
         m_remoteDesktopRadio, m_remoteFileRadio, m_remoteTerminalRadio,
-        m_connectButton, m_localShareButton, m_localPwdChangeButton,
-        m_myDevicesButton, m_settingsButton});
+        m_connectButton, m_localShareButton, m_localPwdChangeButton});
     m_mainPanelGrid = m_content->findChild<QGridLayout *>(QStringLiteral("mainPanelGrid"));
     m_localPanel = m_content->findChild<QWidget *>(QStringLiteral("localDevicePanel"));
     m_remotePanel = m_content->findChild<QWidget *>(QStringLiteral("remoteDevicePanel"));

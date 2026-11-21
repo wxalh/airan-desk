@@ -103,6 +103,28 @@ void AppTitleBar::setTitle(const QString &title)
         m_titleLabel->setText(title);
 }
 
+void AppTitleBar::setNavigationWidget(QWidget *navigation)
+{
+    if (m_navigationWidget == navigation)
+        return;
+    if (m_navigationWidget)
+    {
+        m_layout->removeWidget(m_navigationWidget);
+        m_navigationWidget->hide();
+    }
+    m_navigationWidget = navigation;
+    m_layout->setStretch(m_layout->indexOf(m_titleLabel), navigation ? 0 : 1);
+    if (navigation)
+    {
+        navigation->setParent(this);
+        navigation->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        navigation->setMouseTracking(true);
+        m_layout->insertWidget(m_layout->indexOf(m_titleLabel) + 1, navigation, 1);
+        navigation->show();
+    }
+    applyScale();
+}
+
 
 void AppTitleBar::setResizeAspectRatio(const QSize &baseSize)
 {

@@ -59,7 +59,25 @@ void AppTitleBar::applyScale()
         m_closeButton->setFixedSize(scaled(36), scaled(28));
         m_closeButton->setIconSize(QSize(scaled(12), scaled(12)));
     }
-    setFixedHeight(scaled(38));
+    if (m_navigationWidget)
+    {
+        if (QLayout *layout = m_navigationWidget->layout())
+        {
+            layout->setContentsMargins(scaled(12), 0, scaled(10), 0);
+            layout->setSpacing(scaled(4));
+        }
+        const auto buttons = m_navigationWidget->findChildren<QPushButton *>();
+        for (QPushButton *button : buttons)
+        {
+            QFont font = button->font();
+            font.setPointSizeF(10.0 * scaleValue);
+            font.setBold(button->property("active").toBool());
+            button->setFont(font);
+            button->setFixedHeight(scaled(32));
+            button->setMinimumWidth(scaled(44));
+        }
+    }
+    setFixedHeight(scaled(m_navigationWidget ? 44 : 38));
     applyStyle();
     emit uiScaleChanged();
 }

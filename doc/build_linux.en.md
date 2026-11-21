@@ -2,6 +2,8 @@
 
 [简体中文](build_linux.md) | English
 
+To install the NAS endpoint on fnOS, use the x86_64 or ARM64 `.fpk`. See the [fnOS installation and packaging guide (Chinese)](build_fnos.md).
+
 ## Current Build Model
 
 Linux builds use Qt 5 UI, a Google WebRTC static package, an optional FFmpeg shared/dev runtime package, static `spdlog`, and static `libvterm`. The project requires CMake 3.21+, C++20, and GCC/G++ 11+.

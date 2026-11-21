@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Airan Desk</title>
+  <link rel="stylesheet" href="settings.css">
+  <script src="share.js" defer></script>
+</head>
+<body><main>
+  <header><div><h1>Airan Desk</h1><p>远程文件与终端</p></div><a href="./">刷新状态</a></header>
+  <div class="status {{if .Running}}running{{end}}">{{.ProcessStatus}}</div>
+  <p class="hint">飞牛无桌面环境支持文件传输和终端。文件和终端使用此应用的系统权限。</p>
+  {{if .Notice}}<p class="message success" role="status">{{.Notice}}</p>{{end}}
+  {{if .Error}}<p class="message error" role="alert">{{.Error}}</p>{{end}}
+  <section aria-labelledby="identity-heading">
+    <h2 id="identity-heading">此设备</h2>
+    <dl><dt>设备码（ID）</dt><dd><code id="device-id">{{.Identity.ID}}</code></dd></dl>
+    <p class="hint">设备 ID 固定；设备码和连接密码均为 UUID。</p>
+    <div class="share-actions">
+      <button type="button" id="share-device" class="secondary" aria-describedby="share-hint" {{if not .ShareText}}disabled{{end}}>分享</button>
+      <span id="share-hint" class="hint">复制设备码和验证码，可粘贴到桌面端的远程设备码栏。</span>
+    </div>
+    <p id="share-status" class="hint" role="status" aria-live="polite"></p>
+    <details id="share-fallback" hidden>
+      <summary>手动复制分享内容</summary>
+      <textarea id="share-content" readonly rows="3" spellcheck="false" aria-label="分享内容，包含连接验证码">{{.ShareText}}</textarea>
+    </details>
+    <details><summary>查看连接密码（验证码）</summary><code id="device-password">{{.Identity.Password}}</code></details>
+    <form method="post" action="./" class="reset">
+      <input type="hidden" name="action" value="reset_password">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button type="submit" class="secondary">更换密码</button>
+      <span class="hint">自动生成并保存新的 UUID 密码，设备 ID 不变。已有连接会断开；请重新分享后使用新验证码连接。</span>
+    </form>
+  </section>
+  <form method="post" action="./" autocomplete="off">
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <fieldset>
+      <legend>连接设置</legend>
+      <label>信令服务器
+        <input type="text" name="ws_url" value="{{.Settings.WSServer}}" placeholder="ws://192.168.2.253:3480" maxlength="2048" spellcheck="false">
+      </label>
+      <div class="fields">
+        <label>STUN / TURN 主机 <span>可选</span>
+          <input type="text" name="ice_host" value="{{.Settings.ICEHost}}" maxlength="253" placeholder="IP 或主机名" spellcheck="false">
+        </label>
+        <label>STUN / TURN 端口
+          <input type="number" name="ice_port" value="{{.Settings.ICEPort}}" min="1" max="65535" required>
+        </label>
+        <label>TURN 用户名
+          <input type="text" name="ice_username" value="{{.Settings.ICEUser}}" maxlength="2048" spellcheck="false">
+        </label>
+        <label>新 TURN 密码
+          <input type="password" name="ice_password" maxlength="2048" autocomplete="new-password" placeholder="留空保留现有密码">
+        </label>
+      </div>
+      {{if .Settings.ICEPassword}}<details><summary>查看现有 TURN 密码</summary><code>{{.Settings.ICEPassword}}</code></details>{{end}}
+    </fieldset>
+    <fieldset>
+      <legend>远程访问</legend>
+      <label class="check"><input type="checkbox" name="allow_remote" {{if .Settings.AllowRemote}}checked{{end}}><span>启用远程文件和终端访问</span></label>
+      {{if not .Accepted}}
+      <label class="check consent"><input type="checkbox" name="owner_accept"><span>我是此设备所有者或已获授权的管理员，确认启用远程访问，并知晓操作会记录在本机审计日志中。</span></label>
+      {{else}}<p class="hint">设备所有者授权已确认。操作审计和连接通知保存在本机。</p>{{end}}
+    </fieldset>
+    <footer><button type="submit">保存并应用</button><p>更改设置会重启客户端，已有连接会断开。</p></footer>
+  </form>
+  <section aria-labelledby="notifications-heading">
+    <h2 id="notifications-heading">最近连接通知</h2>
+    <p class="hint">刷新页面查看最新事件。</p>
+    {{if .Notifications}}<ol class="notifications">
+    {{range .Notifications}}<li><time>{{.Time}}</time><strong>{{.Label}}</strong><span>{{.Peer}} · {{.Detail}}</span></li>{{end}}
+    </ol>{{else}}<p class="hint">暂无通知</p>{{end}}
+  </section>
+</main></body>
+</html>

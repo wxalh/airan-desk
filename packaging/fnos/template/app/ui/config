@@ -1,0 +1,15 @@
+{
+  ".url": {
+    "airan-desk.settings": {
+      "title": "Airan Desk",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/airan-desk",
+      "gatewaySocket": "settings.sock",
+      "url": "/app/airan-desk/",
+      "allUsers": false,
+      "control": { "accessPerm": "readonly" }
+    }
+  }
+}

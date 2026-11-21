@@ -441,6 +441,16 @@ QScrollBar::sub-line {
     color: #79bbff;
 }
 
+#appTitleBar QPushButton[homeNavButton="true"] {
+    padding: 0 12px;
+    border-radius: 4px;
+}
+
+#appTitleBar QPushButton[homeNavButton="true"][active="true"] {
+    background: #293744;
+    color: #79bbff;
+}
+
 #serviceStatusLabel {
     background: #293744;
     border: 1px solid #31475b;
@@ -484,7 +494,7 @@ QScrollBar::sub-line {
     color: #e8eaed;
 }
 
-#homeToolbar, #homeFooter, #homeScrollArea, #homeScrollContent {
+#homeFooter, #homeScrollArea, #homeScrollContent {
     background: #202124;
     border: 0;
 }
@@ -504,12 +514,6 @@ QScrollBar::sub-line {
 #homeFormField, #remoteModeSelector {
     background: transparent;
     border: 0;
-}
-
-#homeToolbar {
-    background: #25282b;
-    border: 0;
-    border-bottom: 1px solid #363a3e;
 }
 
 #homeWorkspace {

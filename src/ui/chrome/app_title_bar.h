@@ -21,6 +21,7 @@ public:
     ~AppTitleBar() override;
 
     void setTitle(const QString &title);
+    void setNavigationWidget(QWidget *navigation);
     void setUiScale(double scale);
     void setResizeAspectRatio(const QSize &baseSize);
     void setResizeAspectRatioEnabled(bool enabled);
@@ -57,6 +58,7 @@ private:
     QHBoxLayout *m_layout{nullptr};
     QLabel *m_iconLabel{nullptr};
     QLabel *m_titleLabel{nullptr};
+    QWidget *m_navigationWidget{nullptr};
     QPushButton *m_minimizeButton{nullptr};
     QPushButton *m_maximizeButton{nullptr};
     QPushButton *m_closeButton{nullptr};

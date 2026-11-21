@@ -20,7 +20,9 @@ Airan-Desk is a cross-platform remote desktop administration tool intended only 
 
 [简体中文](README.md) | English
 
-airan-desk is a remote desktop control application built on Qt 5/6 and the Google WebRTC Native API. It supports desktop streaming, remote keyboard and mouse control, file transfer, and a remote terminal. The current desktop targets are Windows, Linux, and macOS.
+airan-desk is a remote desktop control application built on Qt 5/6 and the Google WebRTC Native API. The Windows, Linux, and macOS desktop apps support desktop streaming, remote keyboard and mouse control, file transfer, and a remote terminal.
+
+**fnOS (飞牛 OS) is supported.** The x86_64 and ARM64 `.fpk` packages let you use your NAS as a remote file and terminal endpoint. See the [fnOS installation and packaging guide (Chinese)](doc/build_fnos.md).
 
 ## Security and Acceptable Use Notice
 
@@ -87,8 +89,17 @@ Notes:
 - [Windows build guide](doc/build_win.en.md)
 - [Linux build guide](doc/build_linux.en.md)
 - [macOS build guide](doc/build_mac.en.md)
+- [fnOS installation and packaging (Chinese)](doc/build_fnos.md)
 
 ## Usage
+
+### fnOS (Feiniu OS)
+
+1. Choose `airan-desk-fnos-<version>-amd64.fpk` for x86_64 or `airan-desk-fnos-<version>-arm64.fpk` for ARM64 and install it manually in the fnOS App Center.
+2. Open **Airan Desk** from the fnOS desktop. Configure your private signaling and STUN/TURN settings, confirm the owner's authorization, and enable remote access. To host your own signaling and TURN services on fnOS, install the separate [Signal Server + coturn](https://github.com/wxalh/signal-server) package.
+3. Click **Share** (分享) to copy the device ID and connection code. Paste them into the desktop client and choose File Transfer or Terminal. The fnOS package does not provide desktop streaming, keyboard and mouse control, or a virtual desktop.
+
+Both the device ID and connection password (verification code) must be valid, nonzero UUIDs. The device ID is read-only in the fnOS manager. Click **Change Password** (更换密码) to have the manager generate and immediately save a new UUID password. The ID stays the same, existing connections disconnect, and subsequent shares use the new code. TURN usernames and passwords follow your server's configuration and are not subject to the device UUID rule.
 
 ### Before Launching
 

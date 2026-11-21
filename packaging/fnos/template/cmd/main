@@ -1,0 +1,96 @@
+#!/bin/bash
+set -eu
+umask 077
+
+fail() {
+    printf '%s\n' "$*" >&2
+    if [[ -n "${TRIM_TEMP_LOGFILE:-}" ]]; then
+        printf '%s\n' "$*" > "$TRIM_TEMP_LOGFILE"
+    fi
+    exit 1
+}
+
+[[ -n "${TRIM_APPDEST:-}" && -n "${TRIM_PKGVAR:-}" ]] ||
+    fail 'Missing fnOS application paths.'
+
+manager="$TRIM_APPDEST/bin/fnos-manager"
+sock="$TRIM_APPDEST/settings.sock"
+state="$TRIM_PKGVAR/state"
+run="$TRIM_PKGVAR/run"
+pidfile="$run/manager.pid"
+log="$run/manager.log"
+mkdir -p -- "$run" || fail 'Cannot open the application runtime directory.'
+exec 9>"$run/lifecycle.lock"
+flock -w 30 9 || fail 'Another application operation is in progress.'
+
+# A matching PID and Linux start time identify only this manager instance.
+start_ticks() {
+    local record
+    local -a fields
+    read -r record < "/proc/$1/stat" || return 1
+    read -ra fields <<< "${record##*) }"
+    [[ "${fields[0]:-Z}" != Z && "${fields[19]:-}" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "${fields[19]}"
+}
+
+running() {
+    [[ -f "$pidfile" ]] || return 1
+    read -r pid ticks < "$pidfile" || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ && "$ticks" =~ ^[0-9]+$ ]] || return 1
+    [[ "$(start_ticks "$pid" 2>/dev/null)" == "$ticks" ]]
+}
+
+ready() {
+    curl --silent --fail --max-time 1 --noproxy '*' --unix-socket "$sock" \
+        http://localhost/_health >/dev/null 2>&1
+}
+
+stop_manager() {
+    if running; then
+        kill -TERM "$pid" 2>/dev/null || true
+        for ((i = 0; i < 100; i++)); do
+            running || break
+            sleep 0.2
+        done
+        running && return 1
+    fi
+    rm -f -- "$pidfile" "$sock"
+}
+
+case "${1:-}" in
+    start)
+        if running; then
+            ready || fail "The settings service is not responding. See $log."
+            exit 0
+        fi
+        rm -f -- "$pidfile" "$sock"
+        mkdir -p -- "$state" || fail 'Cannot open the application data directory.'
+        [[ -x "$manager" ]] || fail 'The application manager executable is missing.'
+        cd -- "$TRIM_APPDEST"
+        setsid "$manager" --app-dir "$TRIM_APPDEST" --state-dir "$state" --socket "$sock" \
+            </dev/null >"$log" 2>&1 9>&- &
+        pid=$!
+        ticks="$(start_ticks "$pid" 2>/dev/null)" || fail "The application could not start. See $log."
+        printf '%s %s\n' "$pid" "$ticks" > "$pidfile"
+        deadline=$((SECONDS + 20))
+        while (( SECONDS < deadline )); do
+            running || break
+            if [[ -S "$sock" ]] && ready; then
+                exit 0
+            fi
+            sleep 0.2
+        done
+        stop_manager || true
+        fail "The settings service could not start. See $log."
+        ;;
+    stop)
+        stop_manager || fail "The application did not stop in time. See $log."
+        ;;
+    status)
+        if running && ready; then
+            exit 0
+        fi
+        exit 3
+        ;;
+    *) fail 'Expected start, stop, or status.' ;;
+esac
